@@ -1,0 +1,27 @@
+name: Generate Text File
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_message:
+        description: 'Message to include in the text file'
+        required: true
+        default: 'Hello from GitHub Actions!'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Create message file
+        run: |
+          echo "${{ github.event.inputs.custom_message }}" > message.txt
+
+      - name: Upload text file as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: message-file
+          path: message.txt

@@ -23,5 +23,5 @@ jobs:
       - name: Upload text file as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: message-file
+          name: message.txt
           path: message.txt

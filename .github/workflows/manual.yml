@@ -21,7 +21,7 @@ jobs:
           echo "${{ github.event.inputs.custom_message }}" > message.txt
 
       - name: Upload text file as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: message-file
           path: message.txt

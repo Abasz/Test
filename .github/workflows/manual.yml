@@ -28,15 +28,32 @@ jobs:
 
       - name: 🚧 Build all non-debug envs
         run: |
-            echo "🔨 Building env: $env"
+            echo "🔨 Building binaries"
             pio run -e kayakfirstblue-s3 -e concept2-s3 -e concept2
         shell: bash
+
+      - name: 📦 Prepare zipped firmware binaries
+        run: |
+          mkdir -p release_assets
+          for ENV_DIR in .pio/build/*; do
+            ENV_NAME=$(basename "$ENV_DIR")
+            if [[ "$ENV_NAME" == *-debug ]]; then
+              echo "Skipping debug environment: $ENV_NAME"
+              continue
+            fi
+            BIN_FILES=$(find "$ENV_DIR" -maxdepth 1 -type f -name '*.bin')
+            if [[ -z "$BIN_FILES" ]]; then
+              echo "No .bin files found for environment: $ENV_NAME"
+              exit 1
+            fi
+            ZIP_NAME="firmware-${ENV_NAME}.zip"
+            zip -j "release_assets/$ZIP_NAME" $BIN_FILES
+          done
 
       - name: 📎 Upload firmware binaries
         uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: |
-            $(ls .pio/build/*/*.bin)
-          asset_name: firmware-${{ matrix.env }}.bin
-          asset_content_type: application/octet-stream
+          files: release_assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

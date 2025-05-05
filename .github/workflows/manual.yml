@@ -44,8 +44,7 @@ jobs:
             environmentName=$(basename "${dir}")
             echo "Create asset: ${environmentName}"
             binFiles=$(find "${dir}" -maxdepth 1 -type f -name '*.bin')
-            zipFileName="firmware-${environmentName}.zip"
-            zip -j "release_assets/${zipFileName}" "${binFiles}"
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j "./release_assets/firmware-${environmentName}.zip" -@
           done
 
       - name: 📎 Upload firmware binaries

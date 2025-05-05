@@ -1,0 +1,139 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "e2e test",
+			"command": "build/build-e2e",
+			"args": [
+				"${command:platformio-ide.activeEnvironment}"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: make"
+		},
+		{
+			"type": "cppbuild",
+			"label": "calibrate",
+			"command": "build/run-calibration",
+			"args": [
+				"${command:platformio-ide.activeEnvironment}"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: make"
+		},
+		{
+			"type": "cppbuild",
+			"label": "run tests",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--target",
+				"run-unit-test",
+				"--parallel",
+				"4"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"detail": "compiler: make"
+		},
+		{
+			"type": "cppbuild",
+			"label": "test coverage",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--target",
+				"test-coverage",
+				"--parallel",
+				"4"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": false
+			},
+			"detail": "compiler: make"
+		},
+		{
+			"type": "cppbuild",
+			"label": "build test",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--target",
+				"unit-test",
+				"--parallel",
+				"4"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": false
+			},
+			"detail": "compiler: make"
+		},
+		{
+			"type": "cppbuild",
+			"label": "configure project",
+			"command": "cmake",
+			"args": [
+				"-S",
+				".",
+				"-B",
+				"build"
+			],
+			"options": {
+				"cwd": "${cwd}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			},
+			"detail": "Setup CMake build environment"
+		}
+	]
+}

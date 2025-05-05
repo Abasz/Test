@@ -22,8 +22,6 @@ void setup()
     Log.begin(std::to_underlying(Configurations::defaultLogLevel), &Serial, false);
     Log.setPrefix(printPrefix);
 
-    setupDependencies();
-
     eepromService.setup();
     Log.setLevel(std::to_underlying(eepromService.getLogLevel()));
 

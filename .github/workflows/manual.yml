@@ -28,14 +28,8 @@ jobs:
 
       - name: 🚧 Build all non-debug envs
         run: |
-          for env in $(platformio project environments); do
-            if [[ "$env" == *-debug ]]; then
-              echo "⏭ Skipping debug env: $env"
-              continue
-            fi
             echo "🔨 Building env: $env"
             pio run -e kayakfirstblue-s3 -e concept2-s3 -e concept2
-          done
         shell: bash
 
       - name: 📎 Upload firmware binaries

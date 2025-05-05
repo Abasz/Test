@@ -1,27 +1,48 @@
-name: Generate Text File
+name: 📦 Build & Attach Firmware on Release Created
 
 on:
-  workflow_dispatch:
-    inputs:
-      custom_message:
-        description: 'Message to include in the text file'
-        required: true
-        default: 'Hello from GitHub Actions!'
+  release:
+    types: [created]
 
 jobs:
-  generate:
+  build-and-upload:
     runs-on: ubuntu-latest
+    env:
+      PIO_CLI_CALLER: github-actions
 
     steps:
-      - name: Checkout repo
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create message file
-        run: |
-          echo "${{ github.event.inputs.custom_message }}" > message.txt
-
-      - name: Upload text file as artifact
-        uses: actions/upload-artifact@v4
+      - name: 🔧 Set up Python & PlatformIO
+        uses: actions/setup-python@v5
         with:
-          name: message.txt
-          path: message.txt
+          python-version: '3.x'
+      - run: pip install -U platformio
+
+      - name: 🔖 Show Release details
+        run: |
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          echo "Release name: ${{ github.event.release.name }}"
+        shell: bash
+
+      - name: 🚧 Build all non-debug envs
+        run: |
+          for env in $(platformio project environments); do
+            if [[ "$env" == *-debug ]]; then
+              echo "⏭ Skipping debug env: $env"
+              continue
+            fi
+            echo "🔨 Building env: $env"
+            pio run -e kayakfirstblue-s3 -e concept2-s3 -e concept2
+          done
+        shell: bash
+
+      - name: 📎 Upload firmware binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: |
+            $(ls .pio/build/*/*.bin)
+          asset_name: firmware-${{ matrix.env }}.bin
+          asset_content_type: application/octet-stream

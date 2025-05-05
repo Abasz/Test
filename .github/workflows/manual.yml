@@ -14,11 +14,12 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🔧 Set up Python & PlatformIO
+      - name: 🔧 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - run: pip install -U platformio
+      - name: 🔧 Set up PlatformIO
+        run: pip install -U platformio
 
       - name: 🔖 Show Release details
         run: |
@@ -26,7 +27,7 @@ jobs:
           echo "Release name: ${{ github.event.release.name }}"
         shell: bash
 
-      - name: 🚧 Build all non-debug envs
+      - name: 🚧 Build binaries for all rowers and board profiles
         run: |
             echo "🔨 Building binaries"
             pio run -e kayakfirstblue-s3 -e concept2-s3 -e concept2
@@ -35,17 +36,10 @@ jobs:
       - name: 📦 Prepare zipped firmware binaries
         run: |
           mkdir -p release_assets
-          for ENV_DIR in .pio/build/*; do
+          for ENV_DIR in ./.pio/build/*/; do
             ENV_NAME=$(basename "$ENV_DIR")
-            if [[ "$ENV_NAME" == *-debug ]]; then
-              echo "Skipping debug environment: $ENV_NAME"
-              continue
-            fi
+            echo "Create asset: $ENV_NAME"
             BIN_FILES=$(find "$ENV_DIR" -maxdepth 1 -type f -name '*.bin')
-            if [[ -z "$BIN_FILES" ]]; then
-              echo "No .bin files found for environment: $ENV_NAME"
-              exit 1
-            fi
             ZIP_NAME="firmware-${ENV_NAME}.zip"
             zip -j "release_assets/$ZIP_NAME" $BIN_FILES
           done

@@ -89,7 +89,6 @@ data
 !*.spec.*.txt
 !CMakeLists.txt
 wifi-config.ini
-src/custom.settings.h
 src/profiles/*
 !src/profiles/generic.rower-profile.h
 !src/profiles/generic.board-profile.h

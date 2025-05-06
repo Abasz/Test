@@ -16,12 +16,13 @@ jobs:
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: 🔧 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - name: 🔧 Set up PlatformIO
+
+      - name: 🔧 Set up PlatformIO Core
         run: pip install -U platformio
 
       - name: 🔖 Show Release details
@@ -39,12 +40,11 @@ jobs:
       - name: 📦 Prepare zipped firmware binaries
         run: |
           mkdir -p release_assets
-          for ENV_DIR in ./.pio/build/*/; do
-            ENV_NAME=$(basename "$ENV_DIR")
-            echo "Create asset: $ENV_NAME"
-            BIN_FILES=$(find "$ENV_DIR" -maxdepth 1 -type f -name '*.bin')
-            ZIP_NAME="firmware-${ENV_NAME}.zip"
-            zip -j "release_assets/$ZIP_NAME" $BIN_FILES
+          for dir in ./.pio/build/*/; do
+            environmentName=$(basename "${dir}")
+            echo "Create asset: ${environmentName}"
+            binFiles=$(find "${dir}" -maxdepth 1 -type f -name '*.bin')
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j "./release_assets/firmware-${environmentName}.zip" -@
           done
 
       - name: 📎 Upload firmware binaries

@@ -34,7 +34,8 @@ jobs:
       - name: 🚧 Build binaries for all rowers and board profiles
         run: |
             echo "🔨 Building binaries"
-            pio run -e kayakfirstblue-s3 -e concept2-s3 -e concept2
+            environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+            pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
         shell: bash
 
       - name: 📦 Prepare zipped firmware binaries

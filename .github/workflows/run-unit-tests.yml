@@ -1,0 +1,22 @@
+name: Run Unit Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configure CMake
+        run: cmake -S . -B build
+
+      - name: 🧪 Build and Run Unit Tests
+        run: cmake --build build --target run-unit-test --parallel 4
+

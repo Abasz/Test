@@ -22,7 +22,7 @@ jobs:
 
       - name: 🧪 Build and Run Rower Calibration Tests
         run: |
-          chmod +x ./build/run-calibration
+          chmod 777 ./build/run-calibration
           environments=$(cat platformio.ini | grep -oP '^\[env:\K(?!.*(?:debug|custom)).*(?=\])')
           for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
             ./build/run-calibration "${environment}-generic"

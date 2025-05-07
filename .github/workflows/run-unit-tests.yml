@@ -17,7 +17,7 @@ jobs:
       - name: ⚙️ Configure CMake
         run: |
           cmake -S . -B build
-          ./build/run-calibration kayakfirst-generic
+          ./build/run-calibration
 
       # - name: 🧪 Build and Run Unit Tests
       #   run: cmake --build build --target run-unit-test --parallel $(nproc)

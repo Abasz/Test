@@ -22,8 +22,6 @@ class EEPROMService final : public IEEPROMService
     BleServiceFlag bleServiceFlag = Configurations::defaultBleServiceFlag;
 
 public:
-    RowerConfiguration rowerConfig;
-
     explicit EEPROMService(Preferences &_preferences);
 
     void setup() override;

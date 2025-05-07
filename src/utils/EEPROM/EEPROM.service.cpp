@@ -53,8 +53,6 @@ void EEPROMService::setup()
     logLevel = ArduinoLogLevel{preferences.getUChar(logLevelAddress, std::to_underlying(Configurations::defaultLogLevel))};
     bleServiceFlag = BleServiceFlag{preferences.getUChar(bleServiceFlagAddress, std::to_underlying(Configurations::defaultBleServiceFlag))};
 
-    rowerConfig.impulseDataArrayLength = preferences.getUChar("impulsesPerRevolution", Configurations::impulsesPerRevolution);
-
     Log.verboseln("%s: %d", logLevelAddress, logLevel);
     Log.verboseln("%s: %d", bleServiceFlagAddress, bleServiceFlag);
 }

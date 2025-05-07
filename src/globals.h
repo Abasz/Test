@@ -49,8 +49,6 @@ extern BluetoothController bleController;
 
 extern PeripheralsController peripheralController;
 
-void setupDependencies();
-
 void rotationInterrupt();
 
 void attachRotationInterrupt();

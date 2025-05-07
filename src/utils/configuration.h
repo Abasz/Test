@@ -89,36 +89,3 @@ public:
     static constexpr unsigned int batteryMeasurementFrequency = BATTERY_MEASUREMENT_FREQUENCY * 60 * 1'000;
     static constexpr unsigned int deepSleepTimeout = DEEP_SLEEP_TIMEOUT * 60 * 1'000;
 };
-
-struct RowerConfiguration
-{
-    unsigned char impulsesPerRevolution = Configurations::impulsesPerRevolution;
-    float flywheelInertia = Configurations::flywheelInertia;
-    unsigned short ledBlinkFrequency = Configurations::ledBlinkFrequency;
-    float sprocketRadius = Configurations::sprocketRadius;
-    float concept2MagicNumber = Configurations::concept2MagicNumber;
-
-    Configurations::precision angularDisplacementPerImpulse = Configurations::angularDisplacementPerImpulse;
-    unsigned char driveHandleForcesMaxCapacity = Configurations::driveHandleForcesMaxCapacity;
-
-    // Sensor signal filter settings
-    unsigned short rotationDebounceTimeMin = Configurations::rotationDebounceTimeMin;
-    unsigned int rowingStoppedThresholdPeriod = Configurations::rowingStoppedThresholdPeriod;
-
-    // Drag factor filter settings
-    float goodnessOfFitThreshold = Configurations::goodnessOfFitThreshold;
-    unsigned int maxDragFactorRecoveryPeriod = Configurations::maxDragFactorRecoveryPeriod;
-    float lowerDragFactorThreshold = Configurations::lowerDragFactorThreshold;
-    float upperDragFactorThreshold = Configurations::upperDragFactorThreshold;
-    unsigned char dragCoefficientsArrayLength = Configurations::dragCoefficientsArrayLength;
-
-    // Stroke phase detection filter settings
-    StrokeDetectionType strokeDetectionType = Configurations::strokeDetectionType;
-    float minimumPoweredTorque = Configurations::minimumPoweredTorque;
-    float minimumDragTorque = Configurations::minimumDragTorque;
-    float minimumRecoverySlopeMargin = Configurations::minimumRecoverySlopeMargin;
-    float minimumRecoverySlope = Configurations::minimumRecoverySlope;
-    unsigned int minimumRecoveryTime = Configurations::minimumRecoveryTime;
-    unsigned int minimumDriveTime = Configurations::minimumDriveTime;
-    unsigned char impulseDataArrayLength = Configurations::impulseDataArrayLength;
-};

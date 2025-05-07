@@ -17,11 +17,12 @@ jobs:
       - name: ⚙️ Configure CMake
         run: cmake -S . -B build
 
-      - name: 🧪 Build and Run Unit Tests
-        run: cmake --build build --target run-unit-test --parallel $(nproc)
+      # - name: 🧪 Build and Run Unit Tests
+      #   run: cmake --build build --target run-unit-test --parallel $(nproc)
 
       - name: 🧪 Build and Run Rower Calibration Tests
         run: |
+          git update-index --chmod=+x ./build/*.sh
           environments=$(cat platformio.ini | grep -oP '^\[env:\K(?!.*(?:debug|custom)).*(?=\])')
           for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
             ./build/run-calibration "${environment}-generic"

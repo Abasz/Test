@@ -18,5 +18,4 @@ jobs:
         run: cmake -S . -B build
 
       - name: 🧪 Build and Run Unit Tests
-        run: cmake --build build --target run-unit-test --parallel 4
-
+        run: cmake --build build --target run-unit-test --parallel $(nproc)

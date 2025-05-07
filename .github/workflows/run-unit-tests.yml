@@ -20,9 +20,9 @@ jobs:
       - name: 🧪 Build and Run Unit Tests
         run: cmake --build build --target run-unit-test --parallel $(nproc)
 
-      - name: 🧪 Run Rower Calibration Tests
+      - name: 🧪 Build and Run Rower Calibration Tests
         run: |
-          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+          environments=$(cat platformio.ini | grep -oP '^\[env:\K(?!.*(?:debug|custom)).*(?=\])')
           for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
-            ./build/run-calibration "${environment}"
+            ./build/run-calibration "${environment}-generic"
           done

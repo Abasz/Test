@@ -143,7 +143,7 @@ rowerProfile=$(awk -v targetEnvironment=\"\${targetEnvironment}\" '
 
 echo \"\${rowerProfile:-generic}\"
 "
-    FILE_PERMISSIONS WORLD_EXECUTE
+    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
 )
 
 # Create e2e target
@@ -191,7 +191,7 @@ if [[ ! -f \"${CMAKE_CURRENT_BINARY_DIR}/\${rowerProfile\}.environment\" ]]; the
 fi
 "
     TARGET e2e-test
-    FILE_PERMISSIONS WORLD_EXECUTE
+    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
 )
 
 file(
@@ -212,7 +212,7 @@ rowerProfile=$(\"${CMAKE_CURRENT_BINARY_DIR}/get-rower-profile\" \"\${targetEnvi
 ${CMAKE_COMMAND} --build \"${CMAKE_CURRENT_BINARY_DIR}\" --target e2e-test --parallel $(getconf _NPROCESSORS_ONLN) -- ROWER_PROFILE=\${rowerProfile}
 "
     TARGET e2e-test
-    FILE_PERMISSIONS WORLD_EXECUTE
+    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
 )
 
 add_custom_command(
@@ -321,5 +321,5 @@ for file in \"\${calibrationDir}\"/*test.txt; do
 done
 exit \${exitCode}
 "
-  FILE_PERMISSIONS WORLD_EXECUTE
+  FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
 )

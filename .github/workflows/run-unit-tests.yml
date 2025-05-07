@@ -23,7 +23,6 @@ jobs:
       - name: 📊 Build and Run Rower Calibration Tests
         run: |
           environments=$(cat platformio.ini | grep -oP '^\[env:\K(?!.*(?:debug|custom)).*(?=\])')
-          echo "${environments}"
           for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
             ./build/run-calibration "${environment}-generic"
           done

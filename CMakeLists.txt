@@ -268,7 +268,7 @@ add_custom_command(
 
 # Create calibration target
 file(GENERATE
-  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/run-calibration"
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/run-calibration.sh"
   CONTENT 
 "#!/bin/bash
 

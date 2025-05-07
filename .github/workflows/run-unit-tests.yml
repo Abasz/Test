@@ -24,5 +24,5 @@ jobs:
         run: |
           environments=$(cat platformio.ini | grep -oP '^\[env:\K(?!.*(?:debug|custom)).*(?=\])')
           for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
-            sudo ./build/run-calibration "${environment}-generic"
+            ./build/run-calibration "${environment}-generic"
           done

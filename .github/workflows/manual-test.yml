@@ -1,4 +1,4 @@
-name: 📦 Build & Attach Firmware on Release Created
+name: 📦 manula testing
 
 on:
   workflow_dispatch:

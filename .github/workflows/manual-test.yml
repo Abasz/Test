@@ -1,0 +1,57 @@
+name: 📦 Build & Attach Firmware on Release Created
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      PIO_CLI_CALLER: github-actions
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 🔧 Set up PlatformIO Core
+        run: pip install -U platformio
+
+      - name: 🔖 Show Release details
+        run: |
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          echo "Release name: ${{ github.event.release.name }}"
+        shell: bash
+
+      - name: 🚧 Build binaries for all rowers and board profiles
+        run: |
+            echo "🔨 Building binaries"
+            environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+            pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
+        shell: bash
+
+      - name: 📦 Prepare zipped firmware binaries
+        run: |
+          mkdir -p release_assets
+          for dir in ./.pio/build/*/; do
+            environmentName=$(basename "${dir}")
+            echo "Create asset: ${environmentName}"
+            binFiles=$(find "${dir}" -maxdepth 1 -type f -name '*.bin')
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j "./release_assets/firmware-${environmentName}.zip" -@
+          done
+          echo ${{toJSON(github)}}
+
+      - name: 📎 Upload firmware binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -41,17 +41,17 @@ jobs:
       - name: 📦 Prepare zipped firmware binaries
         run: |
           mkdir -p release_assets
-          for dir in ./.pio/build/*/; do
+          for dir in ${{github.workspace}}/.pio/build/*/; do
             environmentName=$(basename "${dir}")
             echo "Create asset: ${environmentName}"
             binFiles=$(find "${dir}" -maxdepth 1 -type f -name '*.bin')
-            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j "./release_assets/firmware-${environmentName}.zip" -@
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j "${{github.workspace}}/release_assets/firmware-${environmentName}.zip" -@
           done
 
       - name: 📎 Upload firmware binaries
         uses: softprops/action-gh-release@v2
         with:
-          files: release_assets/*
+          files: ${{github.workspace}}/release_assets/*
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

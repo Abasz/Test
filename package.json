@@ -1,10 +1,10 @@
 {
-    "name": "esp-rowing-monitor-client",
+    "name": "Test",
     "version": "3.2.0",
     "scripts": {
         "ng": "ng",
         "start": "ng serve",
-        "dev": "node --input-type=module < ./auto-version.ts && ng build && npx http-server -p 4201 dist/esp-rowing-monitor-client/browser",
+        "dev": "node --input-type=module < ./auto-version.ts && ng build && npx http-server -p 4201 dist/Test/browser",
         "build": "ng build",
         "watch": "ng build --watch --configuration development",
         "test": "ng test"

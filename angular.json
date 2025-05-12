@@ -3,7 +3,7 @@
     "version": 1,
     "newProjectRoot": "projects",
     "projects": {
-        "esp-rowing-monitor-client": {
+        "test": {
             "projectType": "application",
             "schematics": {
                 "@schematics/angular:component": {
@@ -19,7 +19,7 @@
                     "options": {
                         "statsJson": true,
                         "outputPath": {
-                            "base": "dist/esp-rowing-monitor-client"
+                            "base": "dist/test"
                         },
                         "index": "src/index.html",
                         "polyfills": [
@@ -74,10 +74,10 @@
                     "builder": "@angular-devkit/build-angular:dev-server",
                     "configurations": {
                         "production": {
-                            "buildTarget": "esp-rowing-monitor-client:build:production"
+                            "buildTarget": "test:build:production"
                         },
                         "development": {
-                            "buildTarget": "esp-rowing-monitor-client:build:development"
+                            "buildTarget": "test:build:development"
                         }
                     },
                     "defaultConfiguration": "development"
@@ -85,7 +85,7 @@
                 "extract-i18n": {
                     "builder": "@angular-devkit/build-angular:extract-i18n",
                     "options": {
-                        "buildTarget": "esp-rowing-monitor-client:build"
+                        "buildTarget": "test:build"
                     }
                 },
                 "test": {

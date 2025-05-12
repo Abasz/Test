@@ -1,0 +1,26 @@
+<mat-card>
+    <mat-card-header>
+        <mat-card-title>Totals</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+        <div class="grid gap-8">
+            <b>Distance:</b><span> {{ rowingMetricsTotals().distance / 100 | number: "1.2-2" }} m </span>
+            <b>Strokes:</b> <span>{{ rowingMetricsTotals().strokeCount }} stk </span> <b>Drag Factor:</b
+            ><span>
+                {{ rowingMetricsTotals().dragCoefficient * 1e6 | number: "1.0-2" }}
+            </span>
+            <b>Power:</b><span> {{ rowingMetricsTotals().avgStrokePower | number: "1.0-2" }} </span>
+            <b>Min:</b
+            ><span>
+                {{ rowingMetricsTotals().driveHandleForcesMin.index + 1 }} stk /
+                {{ rowingMetricsTotals().driveHandleForcesMin.value }}
+            </span>
+            <b>Max:</b
+            ><span>
+                {{ rowingMetricsTotals().driveHandleForcesMax.index + 1 }} stk /
+                {{ rowingMetricsTotals().driveHandleForcesMax.value }}
+            </span>
+            <b>Margin detect:</b> <span>{{ marginDetect() }}</span>
+        </div>
+    </mat-card-content>
+</mat-card>

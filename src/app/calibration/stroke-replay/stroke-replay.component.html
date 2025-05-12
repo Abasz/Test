@@ -1,0 +1,60 @@
+<mat-card>
+    <mat-card-content>
+        <div class="grid gap-8">
+            <canvas
+                baseChart
+                height="300vh"
+                [data]="handleForcesChart()"
+                [legend]="true"
+                [options]="forceChartOptions"
+                type="line"
+            ></canvas>
+            <div class="grid gap-8 justify-space-between">
+                <b>Stroke:</b> <span>{{ strokeData().strokeCount }}</span> <b>Distance:</b>
+                <span>{{ strokeData().distance / 100 | number: "1.2-2" }} m</span>
+                <b>Stroke rate:</b>
+                <span
+                    >{{
+                        60 / (strokeData().driveDuration / 1e6 + strokeData().recoveryDuration / 1e6)
+                            | number: "1.2-2"
+                    }}
+                    stk
+                </span>
+                <b>Pace:</b>
+                <span>
+                    {{
+                        (500 /
+                            (60 / (strokeData().driveDuration / 1e6 + strokeData().recoveryDuration / 1e6))) *
+                            (distancePerStroke() / 100) | secondsToTime: "pace"
+                    }}
+                    / 500m
+                </span>
+                <b>Distance per stk:</b> <span>{{ distancePerStroke() / 100 | number: "1.2-2" }} m</span>
+                <b>Drag Factor:</b>
+                <span>{{ strokeData().dragCoefficient * 1e6 | number: "1.1-1" }}</span>
+                <b>Power:</b> <span>{{ strokeData().avgStrokePower | number: "1.1-1" }}</span> <b>Drive:</b>
+                <span>{{ strokeData().driveDuration / 1e6 | number: "1.2-2" }}</span> <b>Recovery:</b>
+                <span>{{ strokeData().recoveryDuration / 1e6 | number: "1.2-2" }}</span>
+                <b>Force data count:</b> <span>{{ strokeData().driveHandleForces.length }}</span>
+            </div>
+        </div>
+    </mat-card-content>
+    <mat-card-actions class="gap-16">
+        <button mat-stroked-button (click)="previous()">Previous</button>
+        <button mat-stroked-button (click)="next()">Next</button>
+        <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Stroke number</mat-label>
+            <input
+                step="1"
+                [(ngModel)]="stroke"
+                type="number"
+                matInput
+                name="strokeNumber"
+                min="1"
+                [max]="rowingMetrics().length"
+                [disabled]="rowingMetrics().length === 0"
+            />
+            <mat-error>Invalid stroke number</mat-error>
+        </mat-form-field>
+    </mat-card-actions>
+</mat-card>

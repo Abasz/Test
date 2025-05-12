@@ -1,0 +1,31 @@
+mat-card {
+    height: 100%;
+}
+
+.metric {
+    padding: 0.5em 0.5em 0 0.5em;
+}
+
+mat-icon {
+    font-size: 150%;
+    height: 100%;
+    width: 100%;
+    text-align: center;
+}
+
+.title {
+    text-align: center;
+}
+
+.value {
+    font-size: 150%;
+    text-align: center;
+
+    @media (min-height: 420px) {
+        padding-top: 24px;
+    }
+
+    .unit {
+        font-size: 50%;
+    }
+}

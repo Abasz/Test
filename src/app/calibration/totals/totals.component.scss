@@ -1,0 +1,14 @@
+@use "../../../flex-layout" as flex-layout;
+
+mat-card-content {
+    padding-top: 16px;
+    font-size: 1rem;
+
+    .grid {
+        grid-template-columns: repeat(3, max-content 1fr);
+
+        @include flex-layout.xs {
+            grid-template-columns: repeat(2, max-content 1fr);
+        }
+    }
+}

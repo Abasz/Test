@@ -1,0 +1,16 @@
+.date-option {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+
+    justify-content: center;
+    align-items: start;
+
+    span {
+        text-wrap: nowrap;
+
+        &:last-of-type {
+            font-size: 0.75rem;
+        }
+    }
+}

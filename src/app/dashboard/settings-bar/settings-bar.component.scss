@@ -1,0 +1,57 @@
+@use "@angular/material" as mat;
+
+@use "../../../flex-layout" as flex-layout;
+
+mat-icon.battery-level {
+    padding: 0px 8px;
+}
+
+mat-toolbar {
+    display: grid;
+    align-items: center;
+    justify-content: center;
+    grid-template-columns: max-content 1fr max-content;
+    font-size: 0.7em;
+
+    @include mat.icon-overrides(
+        (
+            color: white,
+        )
+    );
+
+    > div:first-child {
+        margin-left: -16px;
+    }
+
+    > div {
+        > *:not(span) {
+            @include flex-layout.gt-xs {
+                margin: 0px 8px;
+            }
+        }
+    }
+
+    > .time-of-day {
+        justify-self: center;
+    }
+
+    > .title {
+        justify-self: self-end;
+    }
+}
+
+.blink {
+    animation: blink 2s infinite both;
+}
+
+@keyframes blink {
+    0%,
+    50%,
+    100% {
+        opacity: 1;
+    }
+    25%,
+    75% {
+        opacity: 0;
+    }
+}

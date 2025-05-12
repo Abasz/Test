@@ -22,12 +22,12 @@ jobs:
       - name: Npm install & Build
         run: |
           npm install
-          npm run build -- --base-href=/ESPRowingMonitor-WebGUI/
+          npm run build -- --base-href=/Test/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "dist/esp-rowing-monitor-client/browser/"
+          path: "dist/test/browser/"
 
   # Deployment job
   deploy:

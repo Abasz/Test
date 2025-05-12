@@ -20,13 +20,13 @@ jobs:
       - name: 🧪 Build and Run Unit Tests
         run: |
           cmake --build build --target unit-test --parallel $(nproc)
-          ./build/test.out -r tap > results.tap
+          ./build/test.out -r junit > results.xml
 
       - name: Test Summary
         uses: test-summary/action@v2
         with:
           paths: |
-            results.tap
+            results.xml
         if: always()
 
       - name: 📊 Build and Run Rower Calibration Tests

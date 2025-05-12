@@ -18,7 +18,16 @@ jobs:
         run: cmake -S . -B build
 
       - name: 🧪 Build and Run Unit Tests
-        run: cmake --build build --target run-unit-test --parallel $(nproc)
+        run: |
+          cmake --build build --target unit-test --parallel $(nproc)
+          ./build/test.out -r tap > results.tap
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: |
+            results.tap
+        if: always()
 
       - name: 📊 Build and Run Rower Calibration Tests
         run: |

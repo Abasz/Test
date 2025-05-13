@@ -30,8 +30,8 @@ jobs:
           done
 
       - name: 📋 Test Summary
-        uses: test-summary/action@v2
+        uses: mikepenz/action-junit-report@v5
         with:
-          paths: results.xml
+          report_paths: '**/build/test-results/test/TEST-*.xml'
         if: always()
 

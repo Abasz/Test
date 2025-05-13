@@ -32,6 +32,6 @@ jobs:
       - name: 📋 Test Summary
         uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: '**/build/test-results/test/TEST-*.xml'
+          report_paths: "results.xml"
         if: always()
 

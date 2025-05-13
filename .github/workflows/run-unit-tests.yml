@@ -20,7 +20,7 @@ jobs:
       - name: 🧪 Build and Run Unit Tests
         run: |
           cmake --build build --target unit-test --parallel $(nproc)
-          ./build/test.out -r junit > results.xml
+          ./build/test.out -r junit -o results.xml
 
       - name: 📊 Build and Run Rower Calibration Tests
         run: |

@@ -35,9 +35,7 @@ jobs:
           done
 
       - name: 📋 Test Summary
-        uses: mikepenz/action-junit-report@v5
+        uses: test-summary/action@v2
         with:
-          report_paths: "results.xml"
-          annotate_only: true
+          paths: "results.xml"
         if: always()
-

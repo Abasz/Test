@@ -15,16 +15,18 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Set up NodeJs
+        uses: actions/setup-node@v4
 
-      - name: Npm install & Build
+      - name: 🚧 Npm install & Build
         run: |
           npm install
           npm run build -- --base-href=/Test/
 
-      - name: Upload artifact
+      - name: 📎 Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: "dist/test/browser/"
@@ -40,6 +42,6 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - name: Deploy to GitHub Pages
+      - name: 🌐 Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

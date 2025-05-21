@@ -99,3 +99,4 @@ src/profiles/*
 !src/profiles/firebeetle.board-profile.h
 !test/calibration/**/*
 test/calibration/**/output/*
+node_modules

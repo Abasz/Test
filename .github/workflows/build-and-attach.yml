@@ -1,4 +1,4 @@
-name: Build & Attach Firmware To Release
+name: Build & Attach Firmware to Release
 
 on:
   release:
@@ -24,11 +24,6 @@ jobs:
 
       - name: 🔧 Set up PlatformIO Core
         run: pip install -U platformio
-
-      - name: 🔖 Show Release details
-        run: |
-          echo "Release tag: ${{ github.event.release.tag_name }}"
-          echo "Release name: ${{ github.event.release.name }}"
 
       - name: 🚧 Build binaries for all rowers and board profiles
         run: |

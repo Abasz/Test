@@ -77,6 +77,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ─── DETERMINE SCRIPT LOCATION ─────────────────────────────────────────────────
+[[ -n "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR_FULL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" ||     SCRIPT_DIR_FULL_PATH="$(pwd)"
 SCRIPT_DIR_FULL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_PARENT_DIR="$(basename "${SCRIPT_DIR_FULL_PATH}")"
 

@@ -121,4 +121,4 @@ echo
 echo "Base directory set to: ${CHECKOUT_DIR:-.}"
 echo
 
-$(start_auto_compiler "${CHECKOUT_DIR:-.}")
+start_auto_compiler "${CHECKOUT_DIR:-.}"

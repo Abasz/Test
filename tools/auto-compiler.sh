@@ -11,9 +11,12 @@ YELLOW=$'\e[0;33m'
 PURPLE=$'\e[0;35m'
 NC=$'\e[0m' # No Color
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 # ─── PROFILE LISTS ────────────────────────────────────────────────
-mapfile -t ROWERS < <(grep --only-matching --perl-regexp '^\[env:\K(?!.*(?:debug)).*(?=\])' < "platformio.ini" | cut --delimiter '-' --fields 1 | sort --unique --merge)
-mapfile -t BOARDS < <(sed --quiet --expression 's/^\[\(.*\)-board\]$/\1/p' < "platformio.ini")
+mapfile -t ROWERS < <(grep --only-matching --perl-regexp '^\[env:\K(?!.*(?:debug)).*(?=\])' < "${REPO_ROOT}/platformio.ini" | cut --delimiter '-' --fields 1 | sort --unique --merge)
+mapfile -t BOARDS < <(sed --quiet --expression 's/^\[\(.*\)-board\]$/\1/p' < "${REPO_ROOT}/platformio.ini")
 
 # ─── HELPERS ────────────────────────────────────────────────────────────────────
 draw_splash() {
@@ -213,8 +216,7 @@ echo "Profiles → Rower: ${BLUE}${ROWER}${NC}; Board: ${BLUE}${BOARD}${NC}"
 echo
 
 # ─── GENERATE custom.settings.h ───────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SETTINGS_FILE="${SCRIPT_DIR}/../src/custom.settings.h"
+SETTINGS_FILE="${REPO_ROOT}/src/custom.settings.h"
 mkdir -p "$(dirname "${SETTINGS_FILE}")"
 
 {
@@ -285,7 +287,7 @@ fi
 echo "Building firmware..."
 pio run --project-conf "${CUSTOM_INI}" -e custom
 
-SRC_BIN="$SCRIPT_DIR/../.pio/build/custom/firmware.bin"
+SRC_BIN="${REPO_ROOT}/.pio/build/custom/firmware.bin"
 DEST_BIN="$(pwd)/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin"
 
 if [[ -f "${SRC_BIN}" ]]; then

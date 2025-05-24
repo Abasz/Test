@@ -108,13 +108,13 @@ if [[ "${GIT_TAG}" != "current" ]]; then
     pushd "${CHECKOUT_DIR}" >/dev/null || die "Failed to enter directory ${CHECKOUT_DIR}"
     git fetch --all
     git fetch --all --tags
+    git pull
 
     if [[ "${GIT_TAG}" == "latest" ]] || [[ -z "${GIT_TAG}" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
     fi
 
-    git checkout "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
-    git pull --all
+    git reset --hard "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
     popd >/dev/null
 fi
 

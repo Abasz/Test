@@ -23,8 +23,7 @@ cat <<'EOF'
 |________| \______.'|_____|    |____| |___|'.__.'   \__/\__/  [___][___||__].',__`  |_____||_____|'.__.' [___||__][___]\__/ '.__.' [___]
                                                                            ( ( __))
 EOF
-    echo "${PURPLE}Welcome to the ESP Rowing Monitor installer!"
-    echo "${NC}"
+    echo "${PURPLE}Welcome to the ESP Rowing Monitor installer!${NC}"
 }
 
 usage() {
@@ -81,6 +80,7 @@ SCRIPT_PARENT_DIR="$(basename "${SCRIPT_DIR_FULL_PATH}")"
 
 # ─── SKIP EVERYTHING IF SCRIPT IS IN 'tools' AND TAG IS 'current' ───────────────
 if [[ "${SCRIPT_PARENT_DIR}" == "tools" && "${GIT_TAG}" == "current" ]]; then
+    echo
     echo "Installation is complete"
     start_auto_compiler
 fi
@@ -88,6 +88,7 @@ fi
 # ─── GIT INSTALL & CLONE/CHECKOUT LOGIC ─────────────────────────────────────
 # Ensure git is installed
 if ! command -v git &>/dev/null; then
+    echo
     echo "Git not found, installing..."
     sudo apt-get update
     sudo apt-get install -y git
@@ -98,12 +99,14 @@ fi
 
 # Clone only if not in 'tools' directory and repo is not already cloned
 if [[ "${SCRIPT_PARENT_DIR}" != "tools" && ! -d "${CHECKOUT_DIR}/.git" ]]; then
+    echo
     echo "Installing repository from ${GIT_REPO_URL}"
     git clone "${GIT_REPO_URL}" "${CHECKOUT_DIR}" || die "Failed to clone ${GIT_REPO_URL}"
 fi
 
 # Checkout logic if GIT_TAG is not 'current'
 if [[ "${GIT_TAG}" != "current" ]]; then
+    echo
     pushd "${CHECKOUT_DIR}" >/dev/null || die "Failed to enter directory ${CHECKOUT_DIR}"
     git fetch --all --tags
 

@@ -102,12 +102,12 @@ is_valid_board() {
 
 get_rower_include_path() {
     local -r profile="$1"; shift 1
-    local -r config_path="$1"; shift 1
+    local -r configPath="$1"; shift 1
     case "${profile}" in
         kayakfirst)     echo "profiles/kayakfirst.rower-profile.h" ;;
         kayakfirstblue) echo "profiles/kayakfirstBlue.rower-profile.h" ;;
         concept2)       echo "profiles/generic.rower-profile.h" ;;
-        custom)         echo "$config_path" ;;
+        custom)         echo "$configPath" ;;
         *)              die "Unknown rower profile '${profile}'" ;;
     esac
 }
@@ -129,9 +129,9 @@ extract_section() {
     [[ -f "${ini}" ]] || die "File not found: ${ini}"
     [[ -n "${section}" ]] || die "Section name is required"
     # Escape any regex-special chars in section name
-    local -r esc_section=$(echo "${section}" | sed --expression 's/[][\.*^($){}+?|]/\\&/g')
+    local -r escSection=$(echo "${section}" | sed --expression 's/[][\.*^($){}+?|]/\\&/g')
     # Print from the section header down until (but not including) the next '[...'
-    sed --quiet --expression "/^${esc_section}$/,/^\[.*\]/p" "${ini}" | sed --expression '$d'
+    sed --quiet --expression "/^${escSection}$/,/^\[.*\]/p" "${ini}" | sed --expression '$d'
 }
 
 # ─── ARG PARSING ────────────────────────────────────────────────────────────────
@@ -147,12 +147,12 @@ usage() {
 
     # CSS-like min-width for the 'Usage: $prog ' prefix
     local -r prefix="Usage: ${prog} "
-    local -ri actual_width=${#prefix}
+    local -ri actualWidth=${#prefix}
     # Print first line normally
     printf "${GREEN}Usage: %s [-r, --rower <%s>] - Default: concept2\n" "${prog}" "${rowers}"
     # Subsequent lines are indented to 'width'
-    printf "%*s[-b, --board <%s>] - Default: generic\n" "${actual_width}" "" "${boards}"
-    printf "%*s[-f, --config-file <path-to-custom-h>] - Default: custom.settings.h\n\n${NC}" "${actual_width}" ""
+    printf "%*s[-b, --board <%s>] - Default: generic\n" "${actualWidth}" "" "${boards}"
+    printf "%*s[-f, --config-file <path-to-custom-h>] - Default: custom.settings.h\n\n${NC}" "${actualWidth}" ""
     cat <<EOF
 If neither '--rower' nor '--board' is given, runs in interactive mode.
 '--config-file' is ignored unless '--rower' is set to 'custom'.
@@ -214,7 +214,7 @@ echo
 
 # ─── GENERATE custom.settings.h ───────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SETTINGS_FILE="${SCRIPT_DIR}/src/custom.settings.h"
+SETTINGS_FILE="${SCRIPT_DIR}/../src/custom.settings.h"
 mkdir -p "$(dirname "${SETTINGS_FILE}")"
 
 {
@@ -285,7 +285,7 @@ fi
 echo "Building firmware..."
 pio run --project-conf "${CUSTOM_INI}" -e custom
 
-SRC_BIN="$SCRIPT_DIR/.pio/build/custom/firmware.bin"
+SRC_BIN="$SCRIPT_DIR/../.pio/build/custom/firmware.bin"
 DEST_BIN="$(pwd)/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin"
 
 if [[ -f "${SRC_BIN}" ]]; then

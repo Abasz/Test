@@ -169,6 +169,7 @@ while (( $# )); do
         -r|--rower)       ROWER="$2"; shift 2 ;;
         -f|--config-file) CONFIG_FILE="$2"; shift 2 ;;
         -b|--board)       BOARD="$2"; shift 2 ;;
+        -o|--output)      DEST_BIN="$2"; shift 2 ;;
         -h|--help)     usage ;;
         *)             die "Unknown argument: $1" ;;
     esac
@@ -288,7 +289,7 @@ echo "Building firmware..."
 pio run --project-conf "${CUSTOM_INI}" -e custom
 
 SRC_BIN="${REPO_ROOT}/.pio/build/custom/firmware.bin"
-DEST_BIN="$(pwd)/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin"
+: "${DEST_BIN:=$(pwd)/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin}"
 
 if [[ -f "${SRC_BIN}" ]]; then
     cp "${SRC_BIN}" "${DEST_BIN}"

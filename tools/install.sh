@@ -109,6 +109,7 @@ if [[ "${GIT_TAG}" != "current" ]]; then
 
     if [[ "${GIT_TAG}" == "latest" ]] || [[ -z "${GIT_TAG}" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
+        echo "No specific tag provided, using latest tag: ${GIT_TAG}"
     fi
 
     echo "Checking out tag: ${GIT_TAG} in directory: ${CHECKOUT_DIR}"

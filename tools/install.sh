@@ -115,6 +115,7 @@ if [[ "${GIT_TAG}" != "current" ]]; then
 
     git checkout "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
     git pull
+    git pull
     popd >/dev/null
 fi
 

@@ -3,7 +3,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-GIT_REPO_URL="https://github.com/Abasz/ESPRowingMonitor.git"
+GIT_REPO_URL="https://github.com/Abasz/Test.git"
 GIT_TAG="latest"
 
 RED=$'\e[0;31m'
@@ -121,4 +121,4 @@ echo
 echo "Base directory set to: ${CHECKOUT_DIR:-.}"
 echo
 
-start_auto_compiler "${CHECKOUT_DIR:-.}"
+$(start_auto_compiler "${CHECKOUT_DIR:-.}")

@@ -44,7 +44,7 @@ die() {
     exit 1
 }
 
-start_auto_compiler() {
+run_auto_compiler() {
     local -r baseDir="$1"; shift 1
     local autoCompilerArgs=()
     local -r currentWorkingDir="$(pwd)"
@@ -88,7 +88,7 @@ SCRIPT_PARENT_DIR="$(basename "${SCRIPT_DIR_FULL_PATH}")"
 if [[ "${SCRIPT_PARENT_DIR}" == "tools" && "${GIT_TAG}" == "current" ]]; then
     echo
     echo "Installation is complete"
-    start_auto_compiler
+    run_auto_compiler
 fi
 
 # ─── GIT INSTALL & CLONE/CHECKOUT LOGIC ─────────────────────────────────────
@@ -132,4 +132,4 @@ echo
 echo "Base directory set to: ${CHECKOUT_DIR:-.}"
 echo
 
-start_auto_compiler "${CHECKOUT_DIR:-.}"
+run_auto_compiler "${CHECKOUT_DIR:-.}"

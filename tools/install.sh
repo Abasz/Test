@@ -112,7 +112,7 @@ if [[ "${GIT_TAG}" != "current" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
     fi
 
-    git pull "${GIT_TAG}"
+    git pull origin "${GIT_TAG}"
 
     git checkout "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
     popd >/dev/null

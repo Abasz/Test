@@ -53,7 +53,7 @@ start_auto_compiler() {
     read -rp "Do you want to run the auto-compiler script now? (Y/n): " runCompiler
     if [[ -z "$runCompiler" || "$runCompiler" =~ ^[Yy]$ ]]; then
         [[ -f "custom.settings.h" ]] && autoCompilerArgs=("--rower" "custom")
-        "${baseDir}/tools/auto-compiler.sh" "${autoCompilerArgs[@]}"
+        "$./tools/auto-compiler.sh" "${autoCompilerArgs[@]}"
 
         exit 0
     fi
@@ -77,8 +77,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ─── DETERMINE SCRIPT LOCATION ─────────────────────────────────────────────────
-[[ -n "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR_FULL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" ||     SCRIPT_DIR_FULL_PATH="$(pwd)"
-SCRIPT_DIR_FULL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -n "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR_FULL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || SCRIPT_DIR_FULL_PATH="$(pwd)"
 SCRIPT_PARENT_DIR="$(basename "${SCRIPT_DIR_FULL_PATH}")"
 
 # ─── SKIP EVERYTHING IF SCRIPT IS IN 'tools' AND TAG IS 'current' ───────────────

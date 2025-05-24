@@ -247,8 +247,8 @@ mkdir -p "$(dirname "${SETTINGS_FILE}")"
 echo "Generated settings: ${BLUE}${SETTINGS_FILE}${NC}"
 
 # ─── GENERATE platformio.custom.ini ───────────────────────────────────────────
-MASTER_INI="platformio.ini"
-CUSTOM_INI="platformio.custom.ini"
+MASTER_INI="${REPO_ROOT}/platformio.ini"
+CUSTOM_INI="${REPO_ROOT}/platformio.custom.ini"
 
 extract_section "${MASTER_INI}" "[env]" > "${CUSTOM_INI}"
 extract_section "${MASTER_INI}" "[${BOARD}-board]" >> "${CUSTOM_INI}"

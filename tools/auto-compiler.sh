@@ -289,7 +289,7 @@ echo "Building firmware..."
 pio run --project-conf "${CUSTOM_INI}" -e custom
 
 SRC_BIN="${REPO_ROOT}/.pio/build/custom/firmware.bin"
-DEST_BIN="${DEST_DIR:=$(pwd)}/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin}"
+DEST_BIN="${DEST_DIR:=$(pwd)}/firmware-${ROWER}-${BOARD}-$(date --iso-8601=date).bin"
 
 if [[ -f "${SRC_BIN}" ]]; then
     cp "${SRC_BIN}" "${DEST_BIN}"

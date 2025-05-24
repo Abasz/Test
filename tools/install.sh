@@ -54,7 +54,7 @@ start_auto_compiler() {
         pushd "${baseDir}" >/dev/null || die "Failed to enter directory ${baseDir}"
 
         [[ -f "custom.settings.h" ]] && autoCompilerArgs=("--rower" "custom")
-        "$./tools/auto-compiler.sh" "${autoCompilerArgs[@]}"
+        ./tools/auto-compiler.sh "${autoCompilerArgs[@]}"
 
         popd >/dev/null
 

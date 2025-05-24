@@ -113,7 +113,7 @@ if [[ "${GIT_TAG}" != "current" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
     fi
 
-    git checkout "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
+    git reset --hard "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
     popd >/dev/null
 fi
 

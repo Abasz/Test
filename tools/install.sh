@@ -107,7 +107,7 @@ if [[ "${GIT_TAG}" != "current" ]]; then
     pushd "${CHECKOUT_DIR}" >/dev/null || die "Failed to enter directory ${CHECKOUT_DIR}"
     git fetch --all --tags
 
-    if [[ "${GIT_TAG}" == "latest" ]] || [[ -z "${GIT_TAG}" ]]; then
+    if [[ "${GIT_TAG}" == "latest" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
         echo "No specific tag provided, using latest tag: ${GIT_TAG}"
     fi

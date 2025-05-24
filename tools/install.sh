@@ -47,6 +47,7 @@ die() {
 start_auto_compiler() {
     local -r baseDir="$1"; shift 1
     local autoCompilerArgs=()
+    local -r currentWorkingDir="$(pwd)"
 
 
     read -rp "Do you want to run the auto-compiler script now? (Y/n): " runCompiler
@@ -54,7 +55,7 @@ start_auto_compiler() {
         pushd "${baseDir}" >/dev/null || die "Failed to enter directory ${baseDir}"
 
         [[ -f "custom.settings.h" ]] && autoCompilerArgs=("--rower" "custom")
-        ./tools/auto-compiler.sh "${autoCompilerArgs[@]}" --output "${baseDir}"
+        ./tools/auto-compiler.sh "${autoCompilerArgs[@]}" --output "${currentWorkingDir}"
 
         popd >/dev/null
 

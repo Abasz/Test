@@ -48,6 +48,8 @@ start_auto_compiler() {
     local -r baseDir="$1"; shift 1
     local autoCompilerArgs=()
 
+    pushd "${baseDir}" >/dev/null || die "Failed to enter directory ${baseDir}"
+
     read -rp "Do you want to run the auto-compiler script now? (Y/n): " runCompiler
     if [[ -z "$runCompiler" || "$runCompiler" =~ ^[Yy]$ ]]; then
         [[ -f "custom.settings.h" ]] && autoCompilerArgs=("--rower" "custom")

@@ -48,20 +48,21 @@ run_auto_compiler() {
     local -r baseDir="$1"; shift 1
     local autoCompilerArgs=()
     local -r currentWorkingDir="$(pwd)"
-    
-    
+
+
     read -rp "Do you want to run the auto-compiler script now? (Y/n): " runCompiler
     if [[ -z "$runCompiler" || "$runCompiler" =~ ^[Yy]$ ]]; then
-        pushd "${baseDir}" >/dev/null || die "Failed to enter directory ${baseDir}"
-        
         [[ -f "custom.settings.h" ]] && autoCompilerArgs=("--rower" "custom")
+
+        pushd "${baseDir}" >/dev/null || die "Failed to enter directory ${baseDir}"
+
         ./tools/auto-compiler.sh "${autoCompilerArgs[@]}" --output-dir "${currentWorkingDir}"
-        
+
         popd >/dev/null
-        
+
         exit 0
     fi
-    
+
     echo "Skipping auto-compiler script."
 }
 
@@ -116,13 +117,13 @@ if [[ "${GIT_TAG}" != "current" ]]; then
     pushd "${CHECKOUT_DIR}" >/dev/null || die "Failed to enter directory ${CHECKOUT_DIR}"
     git fetch --all --tags
     git pull
-    
+
     if [[ "${GIT_TAG}" == "latest" ]]; then
         GIT_TAG=$(git tag --sort=-creatordate | head -n 1)
     fi
-    
+
     echo "Checking out tag: ${GIT_TAG} in directory: ${CHECKOUT_DIR}"
-    
+
     git reset --hard "${GIT_TAG}" || die "Failed to checkout tag ${GIT_TAG}"
     popd >/dev/null
 fi

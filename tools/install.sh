@@ -97,7 +97,7 @@ if ! command -v git &>/dev/null; then
     echo
     echo "Git not found, installing..."
     sudo apt-get update
-    sudo apt-get install -y git
+    sudo apt-get install --yes git
 fi
 
 # Clone repository and checkout specific tag or latest

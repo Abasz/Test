@@ -268,12 +268,12 @@ echo "Generated custom ini: ${BLUE}${CUSTOM_INI}${NC}"
 if ! command -v python3 &>/dev/null; then
     echo "Installing Python3..."
     sudo apt-get update
-    sudo apt-get install -yes python3 python3-venv
+    sudo apt-get install --yes python3 python3-venv
 fi
 if ! command -v pip3 &>/dev/null; then
     echo "Installing pip3..."
     sudo apt-get update
-    sudo apt-get install -yes python3-venv
+    sudo apt-get install --yes python3-venv
 fi
 if ! command -v pio &>/dev/null; then
     echo "Installing PlatformIO..."

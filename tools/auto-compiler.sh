@@ -272,7 +272,7 @@ if ! command -v pipx &>/dev/null; then
 fi
 if ! command -v pio &>/dev/null; then
     echo "Installing PlatformIO..."
-    pipx install --user --upgrade platformio
+    pipx install platformio
     export PATH="${HOME}/.local/bin:${PATH}"
 else
     echo "Checking PlatformIO version..."

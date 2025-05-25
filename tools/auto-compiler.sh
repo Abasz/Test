@@ -46,12 +46,12 @@ menu() {
     local -i count=${#options[@]}
     local -i cur=0
     local -r esc=$'\e'
-
+    
     tput civis # turn cursor off
-
+    
     # print the prompt once
     echo "$prompt"
-
+    
     while true; do
         # render
         for i in "${!options[@]}"; do
@@ -62,7 +62,7 @@ menu() {
                 printf "   %s\n" "${options[i]}"
             fi
         done
-
+        
         # read first byte
         IFS= read -rsn1 key
         # if it's ESC, try to read up to 2 more bytes (non-blocking)
@@ -70,7 +70,7 @@ menu() {
             IFS= read -rsn2 -t 0.1 rest || true
             key+="${rest}"
         fi
-
+        
         case "${key}" in
             "${esc}[A")  # up arrow
                 (( cur > 0 )) && (( cur-- ))
@@ -82,13 +82,13 @@ menu() {
                 break
             ;;
         esac
-
+        
         # move cursor up to re-draw exactly count lines
         printf "%b" "${esc}[${count}A"
     done
-
+    
     tput cvvis # turn cursor on
-
+    
     # output the selected value into the caller’s variable
     printf -v "${outRef}" '%s' "${options[cur]}"
 }
@@ -143,11 +143,11 @@ BOARD=""
 CONFIG_FILE=""
 
 usage() {
-
+    
     local -r prog="$(basename "${0}")"
     local -r rowers="${ROWERS[*]}"
     local -r boards="${BOARDS[*]}"
-
+    
     # CSS-like min-width for the 'Usage: $prog ' prefix
     local -r prefix="Usage: ${prog} "
     local -ri actualWidth=${#prefix}
@@ -160,7 +160,7 @@ usage() {
 If neither '--rower' nor '--board' is given, runs in interactive mode.
 '--config-file' is ignored unless '--rower' is set to 'custom'.
 EOF
-
+    
     exit 1
 }
 
@@ -200,7 +200,7 @@ fi
 if [[ "${ROWER}" == custom ]]; then
     : "${CONFIG_FILE:=custom.settings.h}"
     [[ -f "${CONFIG_FILE}" ]] || die "Config file not found: ${CONFIG_FILE}"
-
+    
     BOARD=$(sed --quiet --expression 's/^\/\/[[:space:]]*board=\([[:alnum:]_-]\+\)/\1/p' "${CONFIG_FILE}")
     [[ -n "${BOARD}" ]] || die "Custom configuration must contain '// board=<board>' comment"
     if ! is_valid_board "${BOARD}"; then
@@ -224,23 +224,23 @@ mkdir -p "$(dirname "${SETTINGS_FILE}")"
     echo "#pragma once"
     echo
     echo "#include \"$(get_board_include_path "${BOARD}")\""
-
+    
     if [[ "${ROWER}" != custom ]]; then
         ROWER_INC=$(get_rower_include_path "${ROWER}" "${CONFIG_FILE}")
         echo "#include \"${ROWER_INC}\""
     fi
-
+    
     echo
     echo "#include \"./utils/enums.h\""
     echo
     echo "// NOLINTBEGIN(cppcoreguidelines-macro-usage)"
-
+    
     if [[ "${ROWER}" == custom ]]; then
         echo
         cat "${CONFIG_FILE}"
         echo
     fi
-
+    
     echo
     echo "// NOLINTEND(cppcoreguidelines-macro-usage)"
 } > "${SETTINGS_FILE}"

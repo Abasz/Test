@@ -265,16 +265,11 @@ extract_section "${MASTER_INI}" "[${BOARD}-board]" >> "${CUSTOM_INI}"
 echo "Generated custom ini: ${BLUE}${CUSTOM_INI}${NC}"
 
 # ─── ENSURE PYTHON 3 & PLATFORMIO ───────────────────────────────────────────────
-if ! command -v python3 &>/dev/null; then
-    echo "Installing Python3..."
+if ! command -v pipx &>/dev/null; then
+    echo "Installing pipx..."
     sudo apt-get update
-    sudo apt-get install --yes python3 python3-pip
+    sudo apt-get install --yes pipx
 fi
-# if ! command -v pip3 &>/dev/null; then
-#     echo "Installing pip3..."
-#     sudo apt-get update
-#     sudo apt-get install --yes python3-pip
-# fi
 if ! command -v pio &>/dev/null; then
     echo "Installing PlatformIO..."
     pip3 install --user --upgrade platformio

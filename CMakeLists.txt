@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # Set project name and version
 project(
     ESP-Rowing-Monitor
-    VERSION 6.0.2
+    VERSION 6.1.0
     LANGUAGES CXX
 )
 
@@ -17,13 +17,13 @@ Include(FetchContent)
 FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.4.0 # or a later release
+  GIT_TAG v3.8.1
 )
 
 FetchContent_Declare(
   FakeIt
   GIT_REPOSITORY https://github.com/eranpeer/FakeIt.git
-  GIT_TAG 2.4.0 # or a later release
+  GIT_TAG 2.4.1
 )
 
 FetchContent_MakeAvailable(Catch2)
@@ -176,7 +176,6 @@ target_include_directories(e2e-test PRIVATE ${E2E_TEST_DIR})
 target_compile_options(e2e-test PRIVATE ${COMPILER_FLAGS})
 target_compile_definitions(e2e-test PRIVATE
     LOG_CALIBRATION
-    USE_CUSTOM_SETTINGS
     [[BOARD_PROFILE="profiles/generic.board-profile.h"]]
     [[ROWER_PROFILE="profiles/$(ROWER_PROFILE).rower-profile.h"]]
 )

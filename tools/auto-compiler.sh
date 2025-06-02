@@ -106,24 +106,17 @@ is_valid_board() {
 get_rower_include_path() {
     local -r profile="$1"; shift 1
     local -r configPath="$1"; shift 1
-    case "${profile}" in
-        kayakfirst)     echo "profiles/kayakfirst.rower-profile.h" ;;
-        kayakfirstblue) echo "profiles/kayakfirstBlue.rower-profile.h" ;;
-        concept2)       echo "profiles/generic.rower-profile.h" ;;
-        custom)         echo "$configPath" ;;
-        *)              die "Unknown rower profile '${profile}'" ;;
-    esac
-}
-
-get_board_include_path() {
-    local -r profile="$1"; shift 1
-    case "${profile}" in
-        generic)     echo "profiles/generic.board-profile.h" ;;
-        s3)          echo "profiles/lolinS3-mini.board-profile.h" ;;
-        devkit-v1)   echo "profiles/devkit.board-profile.h" ;;
-        firebeetle2) echo "profiles/firebeetle.board-profile.h" ;;
-        *)           die "Unknown board profile '${profile}'" ;;
-    esac
+    for rower in "${ROWERS[@]}"; do
+        if [[ "${profile}" == "${rower}" ]]; then
+            if [[ "${rower}" == "custom" ]]; then
+                echo "$configPath"
+                return 0
+            fi
+            echo "profiles/${rower}.rower-profile.h"
+            return
+        fi
+    done
+    die "Unknown rower profile '${profile}'"
 }
 
 extract_section() {
@@ -220,10 +213,14 @@ echo
 SETTINGS_FILE="${REPO_ROOT}/src/custom.settings.h"
 mkdir -p "$(dirname "${SETTINGS_FILE}")"
 
+if ! is_valid_board "${BOARD}"; then
+    die "Invalid board '${BOARD}'. Valid board configurations are: $(printf '%s, ' "${BOARDS[@]}" | sed --expression 's/, $//')"
+fi
+
 {
     echo "#pragma once"
     echo
-    echo "#include \"$(get_board_include_path "${BOARD}")\""
+    echo "#include BOARD_PROFILE"
     
     if [[ "${ROWER}" != custom ]]; then
         ROWER_INC=$(get_rower_include_path "${ROWER}" "${CONFIG_FILE}")

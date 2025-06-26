@@ -1,4 +1,7 @@
 #include <array>
+#include <string>
+
+#include "esp_mac.h"
 
 #include "Arduino.h"
 
@@ -20,11 +23,12 @@ OtaBleService otaBleService(otaService);
 SettingsBleService settingsBleService(sdCardService, eepromService);
 BaseMetricsBleService baseMetricsBleService(settingsBleService, eepromService);
 ExtendedMetricBleService extendedMetricsBleService;
+ConnectionManagerCallbacks connectionManagerCallbacks;
 
-BluetoothController bleController(eepromService, otaService, settingsBleService, batteryBleService, deviceInfoBleService, otaBleService, baseMetricsBleService, extendedMetricsBleService);
+BluetoothController bleController(eepromService, otaService, settingsBleService, batteryBleService, deviceInfoBleService, otaBleService, baseMetricsBleService, extendedMetricsBleService, connectionManagerCallbacks);
 
 PeripheralsController peripheralController(bleController, sdCardService, eepromService);
-StrokeController strokeController(strokeService, flywheelService);
+StrokeController strokeController(strokeService, flywheelService, eepromService);
 PowerManagerController powerManagerController(powerManagerService);
 
 void IRAM_ATTR rotationInterrupt()
@@ -98,4 +102,23 @@ void printLogLevel(Print *const _logOutput, const int logLevel)
         _logOutput->print("VERBOSE - ");
         break;
     }
+}
+
+std::string generateSerial()
+{
+    const unsigned char macAddressLength = 6U;
+    std::array<unsigned char, macAddressLength> mac{};
+    esp_read_mac(mac.data(), ESP_MAC_BT);
+
+    const unsigned char addressStringSize = 6;
+    std::string serial;
+    serial.resize(addressStringSize);
+
+    // Most efficient way to format without memory size issue with <format> header
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    snprintf(serial.data(), addressStringSize + 1,
+             "%02X%02X%02X",
+             mac[3], mac[4], mac[5]);
+
+    return serial;
 }

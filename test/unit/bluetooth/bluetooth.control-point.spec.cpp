@@ -1,4 +1,6 @@
+// NOLINTBEGIN(readability-magic-numbers)
 #include <array>
+#include <bit>
 #include <utility>
 
 #include "catch2/catch_test_macros.hpp"
@@ -35,6 +37,7 @@ TEST_CASE("ControlPointCallbacks onWrite method should", "[callbacks]")
     Fake(Method(mockEEPROMService, setBleServiceFlag));
     Fake(Method(mockEEPROMService, setLogToSdCard));
     Fake(Method(mockEEPROMService, setLogToBluetooth));
+    Fake(Method(mockEEPROMService, setMachineSettings));
 
     Fake(Method(mockSettingsBleService, broadcastSettings));
 
@@ -398,4 +401,133 @@ TEST_CASE("ControlPointCallbacks onWrite method should", "[callbacks]")
             }
         }
     }
+
+    SECTION("handle RestartDevice request")
+    {
+        std::array<unsigned char, 3U> successResponse = {
+            std::to_underlying(SettingsOpCodes::ResponseCode),
+            std::to_underlying(SettingsOpCodes::RestartDevice),
+            std::to_underlying(ResponseOpCodes::Successful)};
+
+        When(Method(mockControlPointCharacteristic, getValue)).Return({std::to_underlying(SettingsOpCodes::RestartDevice)});
+        Fake(Method(mockGlobals, restartWithDelay));
+
+        controlPointCallback.onWrite(&mockControlPointCharacteristic.get(), mockConnectionInfo.get());
+
+        SECTION("and indicate Success response")
+        {
+            Verify(Method(mockControlPointCharacteristic, getValue)).Once();
+            Verify(Method(mockControlPointCharacteristic, indicate)).Once();
+            Verify(OverloadedMethod(mockControlPointCharacteristic, setValue, void(const std::array<unsigned char, 3U>))
+                       .Using(Eq(successResponse)))
+                .Once();
+        }
+
+        SECTION("restart device")
+        {
+            Verify(Method(mockGlobals, restartWithDelay)).Once();
+        }
+    }
+
+    SECTION("handle SetMachineSettings request")
+    {
+        SECTION("and when settings payload size is invalid return InvalidParameter response")
+        {
+            std::array<unsigned char, 3U> invalidParameterResponse = {
+                std::to_underlying(SettingsOpCodes::ResponseCode),
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                std::to_underlying(ResponseOpCodes::InvalidParameter),
+            };
+
+            When(Method(mockControlPointCharacteristic, getValue)).Return({
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                10,
+                10,
+            });
+
+            controlPointCallback.onWrite(&mockControlPointCharacteristic.get(), mockConnectionInfo.get());
+
+            Verify(Method(mockControlPointCharacteristic, getValue)).Once();
+            Verify(Method(mockControlPointCharacteristic, indicate)).Once();
+            Verify(OverloadedMethod(mockControlPointCharacteristic, setValue, void(const std::array<unsigned char, 3U>))
+                       .Using(Eq(invalidParameterResponse)))
+                .Once();
+        }
+
+        SECTION("and when settings values are invalid return OperationFailed response")
+        {
+            std::array<unsigned char, 3U> operationsFailedResponse = {
+                std::to_underlying(SettingsOpCodes::ResponseCode),
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                std::to_underlying(ResponseOpCodes::OperationFailed),
+            };
+
+            When(Method(mockControlPointCharacteristic, getValue)).Return({
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                0,
+                0,
+                128,
+                191,
+                98,
+            });
+
+            controlPointCallback.onWrite(&mockControlPointCharacteristic.get(), mockConnectionInfo.get());
+
+            Verify(Method(mockControlPointCharacteristic, getValue)).Once();
+            Verify(Method(mockControlPointCharacteristic, indicate)).Once();
+            Verify(OverloadedMethod(mockControlPointCharacteristic, setValue, void(const std::array<unsigned char, 3U>))
+                       .Using(Eq(operationsFailedResponse)))
+                .Once();
+        }
+
+        SECTION("and when MachineSettings is is valid")
+        {
+            std::array<unsigned char, 3U> successResponse = {
+                std::to_underlying(SettingsOpCodes::ResponseCode),
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                std::to_underlying(ResponseOpCodes::Successful),
+            };
+
+            const auto flywheelInertia = std::bit_cast<unsigned int>(Configurations::flywheelInertia);
+
+            const NimBLEAttValue payload = {
+                std::to_underlying(SettingsOpCodes::SetMachineSettings),
+                static_cast<unsigned char>(flywheelInertia),
+                static_cast<unsigned char>(flywheelInertia >> 8),
+                static_cast<unsigned char>(flywheelInertia >> 16),
+                static_cast<unsigned char>(flywheelInertia >> 24),
+                static_cast<unsigned char>(roundf(Configurations::concept2MagicNumber * ISettingsBleService::magicNumberScale)),
+            };
+
+            When(Method(mockControlPointCharacteristic, getValue)).Return(payload);
+
+            controlPointCallback.onWrite(&mockControlPointCharacteristic.get(), mockConnectionInfo.get());
+
+            SECTION("save new machine settings to EEPROM")
+            {
+                Verify(Method(mockEEPROMService, setMachineSettings).Matching([](const RowerProfile::MachineSettings newSettings)
+                                                                              {
+                        REQUIRE(newSettings.flywheelInertia == Configurations::flywheelInertia);
+                        REQUIRE(newSettings.concept2MagicNumber == Configurations::concept2MagicNumber);
+
+                        return true; }))
+                    .Once();
+            }
+
+            SECTION("notify new settings")
+            {
+                Verify(Method(mockSettingsBleService, broadcastSettings)).Once();
+            }
+
+            SECTION("indicate Success response")
+            {
+                Verify(Method(mockControlPointCharacteristic, getValue)).Once();
+                Verify(Method(mockControlPointCharacteristic, indicate)).Once();
+                Verify(OverloadedMethod(mockControlPointCharacteristic, setValue, void(const std::array<unsigned char, 3U>))
+                           .Using(Eq(successResponse)))
+                    .Once();
+            }
+        }
+    }
 }
+// NOLINTEND(readability-magic-numbers)

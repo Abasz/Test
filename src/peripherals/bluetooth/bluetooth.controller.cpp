@@ -6,10 +6,12 @@
 #include "ArduinoLog.h"
 #include "NimBLEDevice.h"
 
+#include "globals.h"
+
 #include "../../utils/configuration.h"
 #include "./bluetooth.controller.h"
 
-BluetoothController::BluetoothController(IEEPROMService &_eepromService, IOtaUpdaterService &_otaService, ISettingsBleService &_settingsBleService, IBatteryBleService &_batteryBleService, IDeviceInfoBleService &_deviceInfoBleService, IOtaBleService &_otaBleService, IBaseMetricsBleService &_baseMetricsBleService, IExtendedMetricBleService &_extendedMetricsBleService) : eepromService(_eepromService), otaService(_otaService), settingsBleService(_settingsBleService), batteryBleService(_batteryBleService), deviceInfoBleService(_deviceInfoBleService), otaBleService(_otaBleService), baseMetricsBleService(_baseMetricsBleService), extendedMetricsBleService(_extendedMetricsBleService), serverCallbacks(_extendedMetricsBleService)
+BluetoothController::BluetoothController(IEEPROMService &_eepromService, IOtaUpdaterService &_otaService, ISettingsBleService &_settingsBleService, IBatteryBleService &_batteryBleService, IDeviceInfoBleService &_deviceInfoBleService, IOtaBleService &_otaBleService, IBaseMetricsBleService &_baseMetricsBleService, IExtendedMetricBleService &_extendedMetricsBleService, IConnectionManagerCallbacks &_connectionManagerCallbacks) : eepromService(_eepromService), otaService(_otaService), settingsBleService(_settingsBleService), batteryBleService(_batteryBleService), deviceInfoBleService(_deviceInfoBleService), otaBleService(_otaBleService), baseMetricsBleService(_baseMetricsBleService), extendedMetricsBleService(_extendedMetricsBleService), connectionManagerCallbacks(_connectionManagerCallbacks)
 {
     if constexpr (Configurations::enableBluetoothDeltaTimeLogging)
     {
@@ -40,7 +42,7 @@ void BluetoothController::update()
 
 bool BluetoothController::isAnyDeviceConnected()
 {
-    return NimBLEDevice::getServer()->getConnectedCount() > 0;
+    return connectionManagerCallbacks.getConnectionCount() > 0;
 }
 
 void BluetoothController::setup()
@@ -64,31 +66,44 @@ void BluetoothController::setupBleDevice()
 {
     Log.verboseln("Initializing BLE device");
 
-    auto deviceName = Configurations::deviceName + " (";
-    ;
+    auto deviceName = Configurations::deviceName;
 
-    switch (eepromService.getBleServiceFlag())
+    if constexpr (Configurations::enableSerialInDeviceName)
     {
-    case BleServiceFlag::CscService:
-        deviceName.append("CSC)");
+        const auto serial = Configurations::serialNumber.empty() ? generateSerial() : Configurations::serialNumber;
 
-        break;
+        deviceName.append("-");
+        deviceName.append(serial);
+    }
 
-    case BleServiceFlag::CpsService:
-        deviceName.append("CPS)");
+    if constexpr (Configurations::addBleServiceStringToName)
+    {
+        deviceName.append(" (");
 
-        break;
+        switch (eepromService.getBleServiceFlag())
+        {
+        case BleServiceFlag::CscService:
+            deviceName.append("CSC)");
 
-    case BleServiceFlag::FtmsService:
-        deviceName.append("FTMS)");
+            break;
 
-        break;
-    default:
-        std::unreachable();
+        case BleServiceFlag::CpsService:
+            deviceName.append("CPS)");
+
+            break;
+
+        case BleServiceFlag::FtmsService:
+            deviceName.append("FTMS)");
+
+            break;
+        default:
+            std::unreachable();
+        }
     }
 
     NimBLEDevice::init(deviceName);
     NimBLEDevice::setPower(std::to_underlying(Configurations::bleSignalStrength));
+    NimBLEDevice::setSecurityAuth(true, false, false);
 
     Log.verboseln("Setting up Server");
 
@@ -96,7 +111,7 @@ void BluetoothController::setupBleDevice()
 
     pServer->advertiseOnDisconnect(true);
 
-    pServer->setCallbacks(&serverCallbacks);
+    pServer->setCallbacks(&connectionManagerCallbacks);
 
     setupServices();
     setupAdvertisement(deviceName);

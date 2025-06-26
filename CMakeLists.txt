@@ -71,9 +71,9 @@ set(SOURCES_UNIT_TEST
     "${LIB_DIR}/peripherals/bluetooth/ble-services/settings.service.cpp"
     "${LIB_DIR}/peripherals/bluetooth/ble-services/device-info.service.cpp"
     "${LIB_DIR}/peripherals/bluetooth/callbacks/control-point.callbacks.cpp"
-    "${LIB_DIR}/peripherals/bluetooth/callbacks/connection-manager.callbacks.cpp"
+    "${LIB_DIR}/peripherals/bluetooth/callbacks/subscription-manager.callbacks.cpp"
     "${LIB_DIR}/peripherals/bluetooth/callbacks/ota.callbacks.cpp"
-    "${LIB_DIR}/peripherals/bluetooth/callbacks/server.callbacks.cpp"
+    "${LIB_DIR}/peripherals/bluetooth/callbacks/connection-manager.callbacks.cpp"
     "${LIB_DIR}/peripherals/bluetooth/bluetooth.controller.cpp"
 
     "${UNIT_TEST_DIR}/bluetooth/ble-services/settings.service.spec.cpp"
@@ -87,9 +87,9 @@ set(SOURCES_UNIT_TEST
     "${UNIT_TEST_DIR}/bluetooth/bluetooth.control-point.spec.cpp"
     "${UNIT_TEST_DIR}/bluetooth/bluetooth.controller.spec.cpp"
     "${UNIT_TEST_DIR}/bluetooth/bluetooth.notifications.spec.cpp"
-    "${UNIT_TEST_DIR}/bluetooth/bluetooth.connection-manager.spec.cpp"
+    "${UNIT_TEST_DIR}/bluetooth/bluetooth.subscription-manager.spec.cpp"
     "${UNIT_TEST_DIR}/bluetooth/bluetooth.ota-callback.spec.cpp"
-    "${UNIT_TEST_DIR}/bluetooth/bluetooth.server-callbacks.spec.cpp"
+    "${UNIT_TEST_DIR}/bluetooth/bluetooth.connection-manager.spec.cpp"
 
     "${UNIT_TEST_DIR}/peripherals.controller.spec.cpp"
     "${UNIT_TEST_DIR}/EEPROM.service.spec.cpp"
@@ -97,6 +97,7 @@ set(SOURCES_UNIT_TEST
     "${UNIT_TEST_DIR}/ota-updater.service.spec.cpp"
     "${UNIT_TEST_DIR}/power-manager.controller.spec.cpp"
     "${UNIT_TEST_DIR}/sd-card.service.spec.cpp"
+    "${UNIT_TEST_DIR}/globals.spec.cpp"
 
     "${UNIT_TEST_DIR}/rower/stroke.controller.spec.cpp"
     "${UNIT_TEST_DIR}/rower/stroke.service.spec.cpp"
@@ -168,6 +169,10 @@ add_custom_target(clean-e2e
     COMMAND /bin/sh -c \'[ -z $(ROWER_PROFILE) ] && { ${CMAKE_COMMAND} -E cmake_echo_color --red \"ERROR: Rower profile is missing\"$<SEMICOLON> exit 1$<SEMICOLON>} || exit 0'
     COMMAND ${CMAKE_COMMAND} -E cmake_echo_color --cyan \"Rower profile: $(ROWER_PROFILE)\"
     COMMAND "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/e2e-test.dir/clean_e2e" $(ROWER_PROFILE)
+)
+target_link_libraries(
+    e2e-test PRIVATE 
+    FakeIt::FakeIt-standalone
 )
 
 add_dependencies(e2e-test clean-e2e)
@@ -243,8 +248,11 @@ add_executable(unit-test ${SOURCES_UNIT_TEST})
 target_include_directories(unit-test PRIVATE ${INCLUDES_UNIT_TEST})
 target_compile_options(unit-test PRIVATE ${COMPILER_FLAGS})
 target_compile_definitions(unit-test PRIVATE UNIT_TEST)
-target_link_libraries(unit-test PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(unit-test PRIVATE FakeIt::FakeIt-catch)
+target_link_libraries(
+    unit-test PRIVATE 
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 set_target_properties(
     unit-test
     PROPERTIES
@@ -266,8 +274,10 @@ target_include_directories(test-coverage PRIVATE ${INCLUDES_UNIT_TEST})
 target_compile_options(test-coverage PRIVATE ${COMPILER_FLAGS_UNIT_TEST} --coverage)
 target_compile_definitions(test-coverage PRIVATE UNIT_TEST)
 target_link_libraries(
-    test-coverage
+    test-coverage PRIVATE
     gcov
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
 )
 set_target_properties(
     test-coverage

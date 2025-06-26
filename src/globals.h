@@ -1,5 +1,7 @@
 #pragma once
 
+#include <concepts>
+
 #include "Arduino.h"
 #include "Preferences.h"
 
@@ -10,6 +12,7 @@
 #include "./peripherals/bluetooth/ble-services/ota.service.h"
 #include "./peripherals/bluetooth/ble-services/settings.service.h"
 #include "./peripherals/bluetooth/bluetooth.controller.h"
+#include "./peripherals/bluetooth/callbacks/connection-manager.callbacks.h"
 #include "./peripherals/peripherals.controller.h"
 #include "./peripherals/sd-card/sd-card.service.h"
 #include "./rower/flywheel.service.h"
@@ -43,6 +46,7 @@ extern DeviceInfoBleService deviceInfoBleService;
 extern OtaBleService otaBleService;
 extern BaseMetricsBleService baseMetricsBleService;
 extern ExtendedMetricBleService extendedMetricsBleService;
+extern ConnectionManagerCallbacks connectionManagerCallbacks;
 extern SdCardService sdCardService;
 
 extern BluetoothController bleController;
@@ -60,7 +64,17 @@ void printPrefix(Print *_logOutput, int logLevel);
 void printTimestamp(Print *_logOutput);
 void printLogLevel(Print *_logOutput, int logLevel);
 
+std::string generateSerial();
+
 consteval bool isOdd(unsigned long number)
 {
     return number % 2 != 0;
 };
+
+template <typename T>
+    requires std::is_arithmetic_v<T>
+constexpr bool
+isInBounds(const T &value, const T &lower, const T &upper)
+{
+    return value >= lower && value <= upper;
+}

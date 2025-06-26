@@ -12,10 +12,11 @@ class ControlPointCallbacks final : public NimBLECharacteristicCallbacks
     ISettingsBleService &settingsBleService;
     IEEPROMService &eepromService;
 
-    ResponseOpCodes processSdCardLogging(const NimBLEAttValue &message, NimBLECharacteristic *pCharacteristic);
-    ResponseOpCodes processLogLevel(const NimBLEAttValue &message, NimBLECharacteristic *pCharacteristic);
-    ResponseOpCodes processDeltaTimeLogging(const NimBLEAttValue &message, NimBLECharacteristic *pCharacteristic);
+    ResponseOpCodes processSdCardLogging(const NimBLEAttValue &message);
+    ResponseOpCodes processLogLevel(const NimBLEAttValue &message);
+    ResponseOpCodes processDeltaTimeLogging(const NimBLEAttValue &message);
     void processBleServiceChange(const NimBLEAttValue &message, NimBLECharacteristic *pCharacteristic);
+    ResponseOpCodes processMachineSettingsChange(const NimBLEAttValue &message);
 
 public:
     explicit ControlPointCallbacks(ISettingsBleService &_settingsBleService, IEEPROMService &_eepromService);

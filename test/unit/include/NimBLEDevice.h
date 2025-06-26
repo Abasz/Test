@@ -85,7 +85,7 @@ public:
         return &_data.back() + 1;
     }
 
-    const unsigned char &operator[](size_t index) const
+    const unsigned char operator[](size_t index) const
     {
         return _data[index];
     }
@@ -139,6 +139,7 @@ class NimBLEServerCallbacks
 {
 public:
     virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) {};
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {};
 };
 
 class NimBLECharacteristicCallbacks
@@ -161,6 +162,7 @@ public:
     virtual size_t getConnectedCount() = 0;
     virtual void init(const std::string deviceName) = 0;
     virtual void setPower(int powerLevel) = 0;
+    virtual void setSecurityAuth(bool bonding, bool middleProtection, bool secureConnection) = 0;
     virtual void advertiseOnDisconnect(bool restart) = 0;
     void setCallbacks(NimBLEServerCallbacks *pCallbacks)
     {
@@ -181,6 +183,7 @@ public:
     virtual void setValue(const unsigned char *data, size_t length) = 0;
     virtual void setValue(const std::string s) = 0;
     virtual void setValue(const std::array<unsigned char, 1U> s) = 0;
+    virtual void setValue(const std::array<unsigned char, 6U>) = 0;
     virtual void setValue(const std::array<unsigned char, 3U> s) = 0;
     virtual void setValue(const std::array<unsigned char, 7U> s) = 0;
     virtual void setValue(const std::array<unsigned char, 11U> s) = 0;
@@ -254,5 +257,10 @@ public:
     {
         mockNimBLEServer.get().setPower(powerLevel);
     }
+
+    static void setSecurityAuth(bool bonding, bool middleProtection, bool secureConnection)
+    {
+        mockNimBLEServer.get().setSecurityAuth(bonding, middleProtection, secureConnection);
+    };
 };
 // NOLINTEND

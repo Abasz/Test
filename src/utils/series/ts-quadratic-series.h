@@ -9,10 +9,10 @@ using std::vector;
 
 class TSQuadraticSeries
 {
-    unsigned char maxSeriesLength;
-    unsigned short maxSeriesAInnerLength = ((maxSeriesLength - 2) * (maxSeriesLength - 1)) / 2;
-    unsigned short maxSeriesALength;
-    unsigned short maxAllocationCapacity;
+    const unsigned char maxSeriesLength;
+    const unsigned short maxSeriesAInnerLength = ((maxSeriesLength - 2) * (maxSeriesLength - 1)) / 2;
+    const unsigned short maxSeriesALength;
+    const unsigned short maxAllocationCapacity;
 
     Configurations::precision a = 0;
     Configurations::precision b = 0;

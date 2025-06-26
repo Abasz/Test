@@ -21,14 +21,19 @@ public:
     static constexpr ArduinoLogLevel defaultLogLevel = DEFAULT_CPS_LOGGING_LEVEL;
     static constexpr bool supportSdCardLogging = SUPPORT_SD_CARD_LOGGING;
 
+    static constexpr bool isRuntimeSettingsEnabled = ENABLE_RUNTIME_SETTINGS;
+
     // Bluetooth Settings
     static constexpr BleServiceFlag defaultBleServiceFlag = DEFAULT_BLE_SERVICE;
     static constexpr bool hasExtendedBleMetrics = HAS_BLE_EXTENDED_METRICS;
     static constexpr bool enableBluetoothDeltaTimeLogging = ENABLE_BLUETOOTH_DELTA_TIME_LOGGING;
     static constexpr BleSignalStrength bleSignalStrength = BLE_SIGNAL_STRENGTH;
 
+    static constexpr bool addBleServiceStringToName = ADD_BLE_SERVICE_TO_DEVICE_NAME;
+    static constexpr bool enableSerialInDeviceName = ADD_SERIAL_TO_DEVICE_NAME;
     inline static const string deviceName = TOSTRING(DEVICE_NAME);
     inline static const string modelNumber = TOSTRING(MODEL_NUMBER);
+    // NOLINTNEXTLINE(readability-redundant-string-init)
     inline static const string serialNumber = SERIAL_NUMBER;
     inline static const string firmwareVersion = string(getCompileDate().data(), getCompileDate().size());
 
@@ -52,7 +57,7 @@ public:
     static constexpr unsigned char impulsesPerRevolution = IMPULSES_PER_REVOLUTION;
     static constexpr float flywheelInertia = FLYWHEEL_INERTIA;
     static constexpr unsigned short ledBlinkFrequency = LED_BLINK_FREQUENCY;
-    static constexpr float sprocketRadius = SPROCKET_RADIUS / 100;
+    static constexpr float sprocketRadius = SPROCKET_RADIUS / 100.0F;
     static constexpr float concept2MagicNumber = CONCEPT_2_MAGIC_NUMBER;
 
     static constexpr precision angularDisplacementPerImpulse = (2 * PI) / impulsesPerRevolution;

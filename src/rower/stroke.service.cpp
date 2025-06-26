@@ -22,6 +22,13 @@ StrokeService::StrokeService()
     angularDistances.push(0, 0);
 }
 
+#if ENABLE_RUNTIME_SETTINGS
+void StrokeService::setup(RowerProfile::MachineSettings newMachineSettings)
+{
+    machineSettings = newMachineSettings;
+}
+#endif
+
 bool StrokeService::isFlywheelUnpowered()
 {
     if constexpr (Configurations::strokeDetectionType != StrokeDetectionType::Slope)

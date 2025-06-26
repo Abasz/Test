@@ -40,6 +40,7 @@ TEST_CASE("BluetoothController", "[peripheral]")
     Mock<IOtaBleService> mockOtaBleService;
     Mock<IBaseMetricsBleService> mockBaseMetricsBleService;
     Mock<IExtendedMetricBleService> mockExtendedMetricsBleService;
+    Mock<IConnectionManagerCallbacks> mockConnectionManagerCallbacks;
 
     const auto serviceFlag = BleServiceFlag::CpsService;
     const auto minimumDeltaTimeMtu = 100;
@@ -60,6 +61,7 @@ TEST_CASE("BluetoothController", "[peripheral]")
     Fake(Method(mockNimBLEServer, advertiseOnDisconnect));
     Fake(Method(mockNimBLEServer, init));
     Fake(Method(mockNimBLEServer, setPower));
+    Fake(Method(mockNimBLEServer, setSecurityAuth));
     Fake(Method(mockNimBLEServer, start));
 
     When(Method(mockBatteryBleService, setup)).AlwaysReturn(&mockNimBLEService.get());
@@ -91,7 +93,7 @@ TEST_CASE("BluetoothController", "[peripheral]")
 
     Fake(Method(mockOtaUpdaterService, begin));
 
-    BluetoothController bluetoothController(mockEEPROMService.get(), mockOtaUpdaterService.get(), mockSettingsBleService.get(), mockBatteryBleService.get(), mockDeviceInfoBleService.get(), mockOtaBleService.get(), mockBaseMetricsBleService.get(), mockExtendedMetricsBleService.get());
+    BluetoothController bluetoothController(mockEEPROMService.get(), mockOtaUpdaterService.get(), mockSettingsBleService.get(), mockBatteryBleService.get(), mockDeviceInfoBleService.get(), mockOtaBleService.get(), mockBaseMetricsBleService.get(), mockExtendedMetricsBleService.get(), mockConnectionManagerCallbacks.get());
 
     SECTION("update method")
     {
@@ -264,6 +266,13 @@ TEST_CASE("BluetoothController", "[peripheral]")
             Verify(Method(mockNimBLEServer, setPower).Using(std::to_underlying(Configurations::bleSignalStrength))).Once();
         }
 
+        SECTION("should set setSecurityAuth")
+        {
+            bluetoothController.setup();
+
+            Verify(Method(mockNimBLEServer, setSecurityAuth).Using(true, false, false)).Once();
+        }
+
         SECTION("should create server")
         {
             bluetoothController.setup();
@@ -426,7 +435,7 @@ TEST_CASE("BluetoothController", "[peripheral]")
     {
         SECTION("should return true if at least one device is connected")
         {
-            When(Method(mockNimBLEServer, getConnectedCount)).Return(1);
+            When(Method(mockConnectionManagerCallbacks, getConnectionCount)).AlwaysReturn(1);
 
             const auto isConnected = bluetoothController.isAnyDeviceConnected();
 
@@ -435,7 +444,7 @@ TEST_CASE("BluetoothController", "[peripheral]")
 
         SECTION("should return false if no device is connected")
         {
-            When(Method(mockNimBLEServer, getConnectedCount)).Return(0);
+            When(Method(mockConnectionManagerCallbacks, getConnectionCount)).AlwaysReturn(0);
 
             const auto isConnected = bluetoothController.isAnyDeviceConnected();
 

@@ -9,8 +9,8 @@ using std::vector;
 
 class TSLinearSeries
 {
-    unsigned char maxSeriesLength;
-    unsigned short maxSlopeSeriesLength = ((maxSeriesLength - 2) * (maxSeriesLength - 1)) / 2;
+    const unsigned char maxSeriesLength;
+    const unsigned short maxSlopeSeriesLength = ((maxSeriesLength - 2) * (maxSeriesLength - 1)) / 2;
     bool shouldRecalculateB = true;
     bool shouldRecalculateA = true;
     Configurations::precision a = 0;

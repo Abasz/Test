@@ -1,4 +1,5 @@
 #include <array>
+#include <limits>
 #include <utility>
 
 #include "ArduinoLog.h"
@@ -27,7 +28,8 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
         array<unsigned char, 3U> errorResponse = {
             std::to_underlying(SettingsOpCodes::ResponseCode),
             static_cast<unsigned char>(0),
-            std::to_underlying(ResponseOpCodes::OperationFailed)};
+            std::to_underlying(ResponseOpCodes::OperationFailed),
+        };
         pCharacteristic->setValue(errorResponse);
         pCharacteristic->indicate();
 
@@ -43,13 +45,14 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
     {
         Log.infoln("Set LogLevel");
 
-        const auto response = processLogLevel(message, pCharacteristic);
+        const auto response = processLogLevel(message);
 
         array<unsigned char, 3U>
             temp = {
                 std::to_underlying(SettingsOpCodes::ResponseCode),
-                static_cast<unsigned char>(message[0]),
-                std::to_underlying(response)};
+                message[0],
+                std::to_underlying(response),
+            };
 
         pCharacteristic->setValue(temp);
     }
@@ -59,32 +62,35 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
     {
         Log.infoln("Change BLE Service");
 
-        if (message.size() == 2 && message[1] >= 0 && message[1] <= 2)
+        if (message.size() != 2 || !isInBounds(static_cast<unsigned int>(message[1]), 0U, 2U))
         {
-            processBleServiceChange(message, pCharacteristic);
+            array<unsigned char, 3U> temp = {
+                std::to_underlying(SettingsOpCodes::ResponseCode),
+                message[0],
+                std::to_underlying(ResponseOpCodes::InvalidParameter),
+            };
 
-            return;
+            pCharacteristic->setValue(temp);
+
+            break;
         }
 
-        array<unsigned char, 3U> temp = {
-            std::to_underlying(SettingsOpCodes::ResponseCode),
-            static_cast<unsigned char>(message[0]),
-            std::to_underlying(ResponseOpCodes::InvalidParameter)};
+        processBleServiceChange(message, pCharacteristic);
 
-        pCharacteristic->setValue(temp);
+        return;
     }
-    break;
 
     case std::to_underlying(SettingsOpCodes::SetSdCardLogging):
     {
         Log.infoln("Change Sd Card Logging");
 
-        const auto response = processSdCardLogging(message, pCharacteristic);
+        const auto response = processSdCardLogging(message);
 
         array<unsigned char, 3U> temp = {
             std::to_underlying(SettingsOpCodes::ResponseCode),
-            static_cast<unsigned char>(message[0]),
-            std::to_underlying(response)};
+            message[0],
+            std::to_underlying(response),
+        };
 
         pCharacteristic->setValue(temp);
     }
@@ -94,14 +100,60 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
     {
         Log.infoln("Change deltaTime logging");
 
-        const auto response = processDeltaTimeLogging(message, pCharacteristic);
+        const auto response = processDeltaTimeLogging(message);
 
         array<unsigned char, 3U> temp = {
             std::to_underlying(SettingsOpCodes::ResponseCode),
-            static_cast<unsigned char>(message[0]),
-            std::to_underlying(response)};
+            message[0],
+            std::to_underlying(response),
+        };
 
         pCharacteristic->setValue(temp);
+    }
+    break;
+
+    case std::to_underlying(SettingsOpCodes::SetMachineSettings):
+    {
+        Log.infoln("Change Machine Settings");
+
+        if constexpr (!Configurations::isRuntimeSettingsEnabled)
+        {
+            array<unsigned char, 3U> temp = {
+                std::to_underlying(SettingsOpCodes::ResponseCode),
+                message[0],
+                std::to_underlying(ResponseOpCodes::UnsupportedOpCode),
+            };
+
+            pCharacteristic->setValue(temp);
+
+            break;
+        }
+
+        const auto response = processMachineSettingsChange(message);
+
+        array<unsigned char, 3U> temp = {
+            std::to_underlying(SettingsOpCodes::ResponseCode),
+            message[0],
+            std::to_underlying(response),
+        };
+
+        pCharacteristic->setValue(temp);
+
+        break;
+    }
+
+    case std::to_underlying(SettingsOpCodes::RestartDevice):
+    {
+        Log.verboseln("Restarting device...");
+
+        array<unsigned char, 3U> temp = {
+            std::to_underlying(SettingsOpCodes::ResponseCode),
+            message[0],
+            std::to_underlying(ResponseOpCodes::Successful),
+        };
+
+        pCharacteristic->setValue(temp);
+        restartWithDelay(100);
     }
     break;
 
@@ -110,8 +162,9 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
         Log.infoln("Not Supported Op Code: %d", message[0]);
         array<unsigned char, 3U> response = {
             eepromService.getBleServiceFlag() == BleServiceFlag::FtmsService ? std::to_underlying(SettingsOpCodes::ResponseCodeFtms) : std::to_underlying(SettingsOpCodes::ResponseCode),
-            static_cast<unsigned char>(message[0]),
-            std::to_underlying(eepromService.getBleServiceFlag() == BleServiceFlag::FtmsService ? ResponseOpCodes::ControlNotPermitted : ResponseOpCodes::UnsupportedOpCode)};
+            message[0],
+            std::to_underlying(eepromService.getBleServiceFlag() == BleServiceFlag::FtmsService ? ResponseOpCodes::ControlNotPermitted : ResponseOpCodes::UnsupportedOpCode),
+        };
         pCharacteristic->setValue(response);
     }
     break;
@@ -121,9 +174,9 @@ void ControlPointCallbacks::onWrite(NimBLECharacteristic *const pCharacteristic,
     pCharacteristic->indicate();
 }
 
-ResponseOpCodes ControlPointCallbacks::processLogLevel(const NimBLEAttValue &message, NimBLECharacteristic *const pCharacteristic)
+ResponseOpCodes ControlPointCallbacks::processLogLevel(const NimBLEAttValue &message)
 {
-    if (message.size() != 2 || message[1] < 0 || message[1] > 6)
+    if (message.size() != 2 || !isInBounds(static_cast<unsigned int>(message[1]), 0U, 6U))
     {
         return ResponseOpCodes::InvalidParameter;
     }
@@ -136,9 +189,9 @@ ResponseOpCodes ControlPointCallbacks::processLogLevel(const NimBLEAttValue &mes
     return ResponseOpCodes::Successful;
 }
 
-ResponseOpCodes ControlPointCallbacks::processSdCardLogging(const NimBLEAttValue &message, NimBLECharacteristic *const pCharacteristic)
+ResponseOpCodes ControlPointCallbacks::processSdCardLogging(const NimBLEAttValue &message)
 {
-    if (message.size() != 2 || message[1] < 0 || message[1] > 1)
+    if (message.size() != 2 || !isInBounds(static_cast<unsigned int>(message[1]), 0U, 1U))
     {
         Log.infoln("Invalid OP command for setting SD Card deltaTime logging, this should be a bool: %d", message[1]);
 
@@ -154,9 +207,9 @@ ResponseOpCodes ControlPointCallbacks::processSdCardLogging(const NimBLEAttValue
     return ResponseOpCodes::Successful;
 }
 
-ResponseOpCodes ControlPointCallbacks::processDeltaTimeLogging(const NimBLEAttValue &message, NimBLECharacteristic *const pCharacteristic)
+ResponseOpCodes ControlPointCallbacks::processDeltaTimeLogging(const NimBLEAttValue &message)
 {
-    if (message.size() != 2 || message[1] < 0 || message[1] > 1)
+    if (message.size() != 2 || !isInBounds(static_cast<unsigned int>(message[1]), 0U, 1U))
     {
         Log.infoln("Invalid OP command for setting deltaTime logging, this should be a bool: %d", message[1]);
 
@@ -195,7 +248,7 @@ void ControlPointCallbacks::processBleServiceChange(const NimBLEAttValue &messag
     eepromService.setBleServiceFlag(BleServiceFlag{message[1]});
     array<unsigned char, 3U> temp = {
         std::to_underlying(SettingsOpCodes::ResponseCode),
-        static_cast<unsigned char>(message[0]),
+        message[0],
         std::to_underlying(ResponseOpCodes::Successful)};
     pCharacteristic->setValue(temp);
     pCharacteristic->indicate();
@@ -204,4 +257,42 @@ void ControlPointCallbacks::processBleServiceChange(const NimBLEAttValue &messag
 
     Log.verboseln("Restarting device...");
     restartWithDelay(100);
+}
+
+ResponseOpCodes ControlPointCallbacks::processMachineSettingsChange(const NimBLEAttValue &message)
+{
+    float flywheelInertia = 0.0F;
+    std::memcpy(&flywheelInertia, std::next(message.data(), 1U), ISettingsBleService::flywheelInertiaPayloadSize);
+
+    const float magicNumber = static_cast<float>(message[ISettingsBleService::machineSettingsPayloadSize]) / ISettingsBleService::magicNumberScale;
+
+    if (message.size() != 1 + ISettingsBleService::machineSettingsPayloadSize)
+    {
+        Log.infoln("Malformed OP command for changing machine settings");
+
+        return ResponseOpCodes::InvalidParameter;
+    }
+
+    if (!isInBounds(magicNumber, 0.0F, std::numeric_limits<float>::max()))
+    {
+        Log.infoln("Invalid magic number, should be greater than 0");
+
+        return ResponseOpCodes::OperationFailed;
+    }
+
+    if (!isInBounds(flywheelInertia, 0.0F, std::numeric_limits<float>::max()))
+    {
+        Log.infoln("Invalid flywheel inertia, should be greater than 0");
+
+        return ResponseOpCodes::OperationFailed;
+    }
+
+    eepromService.setMachineSettings(RowerProfile::MachineSettings{
+        .flywheelInertia = flywheelInertia,
+        .concept2MagicNumber = magicNumber,
+    });
+
+    settingsBleService.broadcastSettings();
+
+    return ResponseOpCodes::Successful;
 }

@@ -98,5 +98,6 @@ src/profiles/*
 !src/profiles/kayakfirst.rower-profile.h
 !src/profiles/kayakfirstBlue.rower-profile.h
 !src/profiles/firebeetle2.board-profile.h
+!src/profiles/olddanube6magnet.rower-profile.h
 !test/calibration/**/*
 test/calibration/**/output/*

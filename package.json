@@ -4,7 +4,7 @@
     "scripts": {
         "ng": "ng",
         "start": "ng serve",
-        "dev": "npm run build:tools && node out-tsc/tools/auto-version.js && node out-tsc/tools/fetch-profiles.js && ng build && npx http-server -p 4201 dist/esp-rowing-monitor-client/browser",
+        "dev": "npm run build:tools && node out-tsc/tools/auto-version.js && node out-tsc/tools/fetch-profiles.js && ng build && npx http-server -p 4201 dist/test/browser",
         "build": "npm run build:tools && node out-tsc/tools/auto-version.js && node out-tsc/tools/fetch-profiles.js && ng build",
         "build:tools": "tsc -p tools/tsconfig.json",
         "watch": "ng build --watch --configuration development",

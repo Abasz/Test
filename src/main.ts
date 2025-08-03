@@ -14,6 +14,43 @@ import { ErrorInterceptor } from "./common/services/error.interceptor.service";
 import { AntHeartRateService } from "./common/services/heart-rate/ant-heart-rate.service";
 import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
 
+
+// --- Global Console Log Redirection ---
+(() => {
+    const logDiv = document.getElementById("global-console-log");
+    if (!logDiv) return;
+    const appendLog = (type: "log" | "warn" | "error", args: any[]) => {
+        const p = document.createElement("p");
+        p.style.margin = "0";
+        p.style.padding = "0";
+        p.style.whiteSpace = "pre-wrap";
+        if (type === "warn") p.style.color = "#b26a00";
+        if (type === "error") p.style.color = "#c62828";
+        p.textContent = args
+            .map((a) => {
+                if (typeof a === "object") {
+                    try {
+                        return JSON.stringify(a, null, 2);
+                    } catch {
+                        return "[object]";
+                    }
+                }
+                return String(a);
+            })
+            .join(" ");
+        logDiv.appendChild(p);
+        // Scroll to bottom if overflowing
+        logDiv.scrollTop = logDiv.scrollHeight;
+    };
+    ["log", "warn", "error"].forEach((type) => {
+        const orig = console[type as "log" | "warn" | "error"];
+        console[type as "log" | "warn" | "error"] = function (...args: any[]) {
+            appendLog(type as "log" | "warn" | "error", args);
+            orig.apply(console, args);
+        };
+    });
+})();
+
 bootstrapApplication(AppComponent, {
     providers: [
         provideRouter([

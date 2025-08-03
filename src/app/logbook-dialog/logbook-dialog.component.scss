@@ -1,0 +1,31 @@
+@use "@angular/material" as mat;
+
+@use "../../theme";
+
+table {
+    width: 100%;
+
+    .date {
+        min-width: 115px;
+    }
+
+    .distance {
+        min-width: 135px;
+    }
+
+    .actions {
+        min-width: 100px;
+    }
+}
+
+mat-progress-bar {
+    margin-top: 8px;
+}
+
+.delete-button {
+    @include mat.icon-button-overrides(
+        (
+            icon-color: #{mat.get-theme-color(theme.$light-theme, tertiary, 40)},
+        )
+    );
+}

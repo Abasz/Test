@@ -1,0 +1,18 @@
+<mat-card class="justify-center">
+    <ng-content></ng-content>
+    <div class="flex-col justify-center metric">
+        @if (icon() === undefined) {
+            <span class="title">
+                {{ title() }}
+            </span>
+        }
+        @if (icon()) {
+            <mat-icon matTooltipPosition="above" matTooltipShowDelay="1000" [matTooltip]="title() ?? ''">{{
+                icon()
+            }}</mat-icon>
+        }
+        <div class="value">
+            <span> {{ value() }} </span> <span class="unit"> {{ unit() }} </span>
+        </div>
+    </div>
+</mat-card>

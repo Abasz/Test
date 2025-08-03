@@ -14,12 +14,15 @@ import { ErrorInterceptor } from "./common/services/error.interceptor.service";
 import { AntHeartRateService } from "./common/services/heart-rate/ant-heart-rate.service";
 import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
 
-
-// --- Global Console Log Redirection ---
-(() => {
-    const logDiv = document.getElementById("global-console-log");
-    if (!logDiv) return;
+// --- Global Console Log Redirection with Buffering ---
+(function () {
+    const buffer: { type: "log" | "warn" | "error"; args: any[] }[] = [];
+    let logDiv: HTMLElement | null = null;
     const appendLog = (type: "log" | "warn" | "error", args: any[]) => {
+        if (!logDiv) {
+            buffer.push({ type, args });
+            return;
+        }
         const p = document.createElement("p");
         p.style.margin = "0";
         p.style.padding = "0";
@@ -39,7 +42,6 @@ import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
             })
             .join(" ");
         logDiv.appendChild(p);
-        // Scroll to bottom if overflowing
         logDiv.scrollTop = logDiv.scrollHeight;
     };
     ["log", "warn", "error"].forEach((type) => {
@@ -49,6 +51,17 @@ import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
             orig.apply(console, args);
         };
     });
+    // Wait for DOMContentLoaded to flush buffer
+    function tryFlush() {
+        logDiv = document.getElementById("global-console-log");
+        if (logDiv) {
+            buffer.forEach((entry) => appendLog(entry.type, entry.args));
+            buffer.length = 0;
+        } else {
+            setTimeout(tryFlush, 50);
+        }
+    }
+    tryFlush();
 })();
 
 bootstrapApplication(AppComponent, {
@@ -103,7 +116,6 @@ bootstrapApplication(AppComponent, {
         /(?<ios>iPad|iPhone|iPod)|(?<ipadmac>Macintosh).*?(?=\))(?=.*?Mobile)|(?<browser>CriOS|Chrome|Safari|Firefox|Edg)/,
     );
 
-    // Show and populate the error overlay from index.html
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");
     const advice = document.getElementById("global-error-advice");

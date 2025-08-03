@@ -15,23 +15,6 @@
         "experimentalDecorators": true,
         "moduleResolution": "bundler",
         "importHelpers": true,
-/* To learn more about this file see: https://angular.io/config/tsconfig. */
-{
-    "compileOnSave": false,
-    "compilerOptions": {
-        "baseUrl": "./",
-        "outDir": "./dist/out-tsc",
-        "forceConsistentCasingInFileNames": true,
-        "esModuleInterop": true,
-        "strict": true,
-        "noImplicitOverride": true,
-        "noImplicitReturns": true,
-        "noFallthroughCasesInSwitch": true,
-        "sourceMap": true,
-        "declaration": false,
-        "experimentalDecorators": true,
-        "moduleResolution": "bundler",
-        "importHelpers": true,
         "target": "es5",
         "module": "es5",
         "useDefineForClassFields": false,
@@ -39,19 +22,6 @@
             "ES5",
             "dom"
         ],
-        "paths": {
-            "chart.js/dist/types/utils": [
-                "node_modules/chart.js/dist/types/utils"
-            ]
-        }
-    },
-    "angularCompilerOptions": {
-        "enableI18nLegacyMessageIdFormat": false,
-        "strictInjectionParameters": true,
-        "strictInputAccessModifiers": true,
-        "strictTemplates": true
-    },
-}
         "paths": {
             "chart.js/dist/types/utils": [
                 "node_modules/chart.js/dist/types/utils"

@@ -15,11 +15,11 @@
         "experimentalDecorators": true,
         "moduleResolution": "bundler",
         "importHelpers": true,
-        "target": "es5",
-        "module": "es5",
+        "target": "ES2022",
+        "module": "ES2022",
         "useDefineForClassFields": false,
         "lib": [
-            "ES5",
+            "ES2022",
             "dom"
         ],
         "paths": {

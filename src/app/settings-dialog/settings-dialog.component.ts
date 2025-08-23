@@ -24,20 +24,15 @@ import { MatTab, MatTabGroup } from "@angular/material/tabs";
 import { firstValueFrom, map, Observable } from "rxjs";
 
 import { IDeviceInformation } from "../../common/ble.interfaces";
-import {
-    HeartRateMonitorMode,
-    IErgConnectionStatus,
-    IRowerSettings,
-    IStrokeDetectionSettings,
-} from "../../common/common.interfaces";
+import { HeartRateMonitorMode, IErgConnectionStatus, IRowerSettings } from "../../common/common.interfaces";
 import { ConfigManagerService } from "../../common/services/config-manager.service";
+import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 import { ErgSettingsService } from "../../common/services/ergometer/erg-settings.service";
 import { UtilsService } from "../../common/services/utils.service";
 import { SnackBarConfirmComponent } from "../../common/snack-bar-confirm/snack-bar-confirm.component";
 
 import { GeneralSettingsComponent } from "./general-settings.component";
-import { AdvancedSettingsComponent, AdvancedSettingsFormGroup } from "./rower-settings.component";
-import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
+import { RowingSettingsComponent, RowingSettingsFormGroup } from "./rowing-settings.component";
 
 @Component({
     selector: "app-settings-dialog",
@@ -53,31 +48,30 @@ import { ErgConnectionService } from "../../common/services/ergometer/erg-connec
         MatTab,
         MatTabGroup,
         GeneralSettingsComponent,
-        AdvancedSettingsComponent,
+        RowingSettingsComponent,
         AsyncPipe,
     ],
 })
 export class SettingsDialogComponent {
-    readonly advancedSettings: Signal<AdvancedSettingsComponent> =
-        viewChild.required(AdvancedSettingsComponent);
+    readonly rowingSettings: Signal<RowingSettingsComponent> = viewChild.required(RowingSettingsComponent);
     readonly generalSettings: Signal<GeneralSettingsComponent> = viewChild.required(GeneralSettingsComponent);
 
     readonly isSaveButtonEnabled: Signal<boolean> = computed((): boolean => {
         const currentTab = this.currentTabIndex();
         const isGeneralFormSaveable = this.isGeneralFormSaveable();
-        const isRowerFormSaveable = this.isRowerFormSaveable();
+        const isRowingFormSaveable = this.isRowingFormSaveable();
 
-        return (currentTab === 0 && isGeneralFormSaveable) || (currentTab === 1 && isRowerFormSaveable);
+        return (currentTab === 0 && isGeneralFormSaveable) || (currentTab === 1 && isRowingFormSaveable);
     });
 
-    breakPoints$: Observable<boolean> = this.utils
+    readonly breakPoints$: Observable<boolean> = this.utils
         .breakpointHelper([[599, "max"]])
         .pipe(map((value: { [key: string]: boolean }): boolean => value.maxW599));
 
-    currentTabIndex: WritableSignal<number> = signal<number>(0);
+    readonly currentTabIndex: WritableSignal<number> = signal<number>(0);
 
     private readonly isGeneralFormSaveable: WritableSignal<boolean> = signal<boolean>(true);
-    private readonly isRowerFormSaveable: WritableSignal<boolean> = signal<boolean>(true);
+    private readonly isRowingFormSaveable: WritableSignal<boolean> = signal<boolean>(true);
 
     private isSaving: boolean = false;
 
@@ -91,7 +85,6 @@ export class SettingsDialogComponent {
         @Inject(MAT_DIALOG_DATA)
         public data: {
             rowerSettings: IRowerSettings;
-            strokeDetectionSettings: IStrokeDetectionSettings;
             ergConnectionStatus: IErgConnectionStatus;
             deviceInfo: IDeviceInformation;
         },
@@ -125,9 +118,9 @@ export class SettingsDialogComponent {
         this.isGeneralFormSaveable.set(isValid && this.generalSettings().getForm().dirty);
     }
 
-    onRowerFormValidityChange(isValid: boolean): void {
-        this.isRowerFormSaveable.set(
-            isValid && (this.advancedSettings().getForm().dirty || this.advancedSettings().isProfileLoaded),
+    onRowingFormValidityChange(isValid: boolean): void {
+        this.isRowingFormSaveable.set(
+            isValid && (this.rowingSettings().getForm().dirty || this.rowingSettings().isProfileLoaded),
         );
     }
 
@@ -140,16 +133,16 @@ export class SettingsDialogComponent {
 
         try {
             if (
-                ((this.currentTabIndex() === 0 && this.isRowerFormSaveable()) ||
+                ((this.currentTabIndex() === 0 && this.isRowingFormSaveable()) ||
                     (this.currentTabIndex() === 1 && this.isGeneralFormSaveable())) &&
                 (await this.showSaveConfirmation())
             ) {
                 await this.saveGeneralSettings();
-                await this.saveAdvancedSettings();
+                await this.saveRowingSettings();
             } else {
                 this.currentTabIndex() === 0
                     ? await this.saveGeneralSettings()
-                    : await this.saveAdvancedSettings();
+                    : await this.saveRowingSettings();
             }
 
             this.dialogRef.close();
@@ -164,7 +157,7 @@ export class SettingsDialogComponent {
 
     async handleDialogClose(): Promise<void> {
         if (
-            (!this.advancedSettings().getForm().dirty && !this.generalSettings().getForm().dirty) ||
+            (!this.rowingSettings().getForm().dirty && !this.generalSettings().getForm().dirty) ||
             (await firstValueFrom(
                 this.snackBar
                     .openFromComponent(SnackBarConfirmComponent, {
@@ -212,37 +205,36 @@ export class SettingsDialogComponent {
         }
     }
 
-    private async saveAdvancedSettings(): Promise<void> {
-        const advancedSettingsForm = this.advancedSettings().getForm();
-        const isProfileLoaded = this.advancedSettings().isProfileLoaded;
+    private async saveRowingSettings(): Promise<void> {
+        const rowingSettingsForm = this.rowingSettings().getForm();
+        const isProfileLoaded = this.rowingSettings().isProfileLoaded;
 
-        if (advancedSettingsForm.dirty) {
-            this.advancedSettings().saveAsCustomProfile();
+        if (rowingSettingsForm.dirty) {
+            this.rowingSettings().saveAsCustomProfile();
         }
 
-        if (isProfileLoaded || advancedSettingsForm.controls.machineSettings.dirty) {
-            const machineSettings = advancedSettingsForm.controls.machineSettings.getRawValue();
+        if (isProfileLoaded || rowingSettingsForm.controls.machineSettings.dirty) {
+            const machineSettings = rowingSettingsForm.controls.machineSettings.getRawValue();
 
             await this.ergSettingsService.changeMachineSettings(machineSettings);
         }
 
-        await this.handleSensorAndDragSettings(advancedSettingsForm, isProfileLoaded);
+        await this.handleSensorAndDragSettings(rowingSettingsForm, isProfileLoaded);
 
-        if (isProfileLoaded || advancedSettingsForm.controls.strokeDetectionSettings.dirty) {
-            const strokeDetectionSettings =
-                advancedSettingsForm.controls.strokeDetectionSettings.getRawValue();
+        if (isProfileLoaded || rowingSettingsForm.controls.strokeDetectionSettings.dirty) {
+            const strokeDetectionSettings = rowingSettingsForm.controls.strokeDetectionSettings.getRawValue();
 
             await this.ergSettingsService.changeStrokeSettings(strokeDetectionSettings);
         }
 
-        if (isProfileLoaded || advancedSettingsForm.dirty) {
+        if (isProfileLoaded || rowingSettingsForm.dirty) {
             await this.ergSettingsService.restartDevice();
             await this.ergConnectionService.reconnect();
         }
     }
 
     private async handleSensorAndDragSettings(
-        form: AdvancedSettingsFormGroup,
+        form: RowingSettingsFormGroup,
         isLoaded: boolean,
     ): Promise<void> {
         const sensorSettingsForm = form.controls.sensorSignalSettings;
@@ -260,10 +252,10 @@ export class SettingsDialogComponent {
 
         const isRotationDebounceIncreased =
             newSensorSettings.rotationDebounceTime >
-            this.data.rowerSettings.sensorSignalSettings.rotationDebounceTime;
+            this.data.rowerSettings.rowingSettings.sensorSignalSettings.rotationDebounceTime;
         const isMaxDragFactorRecoveryPeriodIncreased =
             newDragSettings.maxDragFactorRecoveryPeriod >
-            this.data.rowerSettings.dragFactorSettings.maxDragFactorRecoveryPeriod;
+            this.data.rowerSettings.rowingSettings.dragFactorSettings.maxDragFactorRecoveryPeriod;
 
         if (isRotationDebounceIncreased && isMaxDragFactorRecoveryPeriodIncreased) {
             await this.ergSettingsService.changeSensorSignalSettings(newSensorSettings);
@@ -287,7 +279,7 @@ export class SettingsDialogComponent {
                 .openFromComponent(SnackBarConfirmComponent, {
                     duration: undefined,
                     data: {
-                        text: `${this.currentTabIndex() === 1 ? "General" : "Rower"} tab has changes, save those too?`,
+                        text: `${this.currentTabIndex() === 1 ? "General" : "Rowing"} tab has changes, save those too?`,
                         cancel: "No",
                     },
                 })

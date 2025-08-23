@@ -25,10 +25,12 @@ body {
         )
     );
 
-    font-size: calc(16px + (50 - 16) * ((100vw - 300px) / (1920 - 300)));
+    app-root {
+        font-size: calc(16px + (50 - 16) * ((100vw - 300px) / (1920 - 300)));
 
-    @media screen and (max-height: 499px) {
-        font-size: calc(16px + (40 - 16) * ((100vw - 300px) / (1920 - 300)));
+        @media screen and (max-height: 499px) {
+            font-size: calc(16px + (40 - 16) * ((100vw - 300px) / (1920 - 300)));
+        }
     }
 }
 
@@ -150,6 +152,7 @@ mat-form-field mat-error {
             border-left: 4px solid #e57373;
             margin: 0;
             text-align: left;
+            font-size: 0.5em;
         }
     }
 }

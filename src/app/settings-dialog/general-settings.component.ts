@@ -33,10 +33,10 @@ import { map, startWith } from "rxjs";
 
 import { BleServiceFlag, BleServiceNames, IDeviceInformation, LogLevel } from "../../common/ble.interfaces";
 import { HeartRateMonitorMode, IRowerSettings, IValidationErrors } from "../../common/common.interfaces";
+import { versionInfo } from "../../common/data/version";
 import { ConfigManagerService } from "../../common/services/config-manager.service";
 import { EnumToArrayPipe } from "../../common/utils/enum-to-array.pipe";
 import { getValidationErrors } from "../../common/utils/utility.functions";
-import { versionInfo } from "../../version";
 import { OtaDialogComponent } from "../ota-settings-dialog/ota-dialog.component";
 
 type GeneralSettingsFormGroup = FormGroup<{
@@ -68,20 +68,20 @@ type GeneralSettingsFormGroup = FormGroup<{
     ],
 })
 export class GeneralSettingsComponent implements OnInit {
-    BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
-    BleServiceNames: typeof BleServiceNames = BleServiceNames;
-    LogLevel: typeof LogLevel = LogLevel;
+    readonly BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
+    readonly BleServiceNames: typeof BleServiceNames = BleServiceNames;
+    readonly LogLevel: typeof LogLevel = LogLevel;
 
-    rowerSettings: InputSignal<IRowerSettings> = input.required<IRowerSettings>();
-    deviceInfo: InputSignal<IDeviceInformation> = input.required<IDeviceInformation>();
-    isConnected: InputSignal<boolean> = input.required<boolean>();
+    readonly rowerSettings: InputSignal<IRowerSettings> = input.required<IRowerSettings>();
+    readonly deviceInfo: InputSignal<IDeviceInformation> = input.required<IDeviceInformation>();
+    readonly isConnected: InputSignal<boolean> = input.required<boolean>();
 
     readonly isFormValidChange: OutputEmitterRef<boolean> = output<boolean>();
 
-    settingsForm: GeneralSettingsFormGroup;
-    settingsFormErrors: Signal<ValidationErrors | null>;
+    readonly settingsForm: GeneralSettingsFormGroup;
+    readonly settingsFormErrors: Signal<ValidationErrors | null>;
 
-    compileDate: Date = new Date(versionInfo.timeStamp);
+    readonly compileDate: Date = new Date(versionInfo.timeStamp);
 
     private readonly formValueChanged: Signal<
         Partial<
@@ -145,11 +145,11 @@ export class GeneralSettingsComponent implements OnInit {
         const isConnected = this.isConnected();
 
         this.settingsForm.patchValue({
-            bleMode: rowerSettings.bleServiceFlag,
-            logLevel: rowerSettings.logLevel,
+            bleMode: rowerSettings.generalSettings.bleServiceFlag,
+            logLevel: rowerSettings.generalSettings.logLevel,
             heartRateMonitor: this.configManager.getItem("heartRateMonitor") as HeartRateMonitorMode,
-            deltaTimeLogging: rowerSettings.logDeltaTimes,
-            logToSdCard: rowerSettings.logToSdCard,
+            deltaTimeLogging: rowerSettings.generalSettings.logDeltaTimes,
+            logToSdCard: rowerSettings.generalSettings.logToSdCard,
         });
 
         if (isConnected) {
@@ -158,10 +158,10 @@ export class GeneralSettingsComponent implements OnInit {
 
         this.settingsForm.controls.heartRateMonitor.enable();
 
-        if (rowerSettings.logDeltaTimes === undefined) {
+        if (rowerSettings.generalSettings.logDeltaTimes === undefined) {
             this.settingsForm.controls.deltaTimeLogging.disable();
         }
-        if (rowerSettings.logToSdCard === undefined) {
+        if (rowerSettings.generalSettings.logToSdCard === undefined) {
             this.settingsForm.controls.logToSdCard.disable();
         }
     }

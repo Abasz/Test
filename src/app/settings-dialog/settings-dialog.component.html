@@ -15,15 +15,17 @@
             </app-general-settings>
         </mat-tab>
 
-        <mat-tab label="Rower" [disabled]="data.rowerSettings.isRuntimeSettingsEnabled === undefined">
-            <app-rower-settings
+        <mat-tab
+            label="Rowing"
+            [disabled]="data.rowerSettings.generalSettings.isRuntimeSettingsEnabled === undefined"
+        >
+            <app-rowing-settings
                 [rowerSettings]="data.rowerSettings"
-                [strokeSettings]="data.strokeDetectionSettings"
                 [isConnected]="data.ergConnectionStatus.status === 'connected'"
                 [isSmallScreen]="(breakPoints$ | async) ?? false"
-                (isFormValidChange)="onRowerFormValidityChange($event)"
+                (isFormValidChange)="onRowingFormValidityChange($event)"
             >
-            </app-rower-settings>
+            </app-rowing-settings>
         </mat-tab>
     </mat-tab-group>
 </div>

@@ -22,7 +22,7 @@ import { SpinnerOverlayRef } from "./spinner-overlay-ref";
 })
 export class SpinnerOverlayComponent {
     animationState: "void" | "enter" | "leave" = "enter";
-    animationStateChanged: EventEmitter<AnimationEvent> = new EventEmitter<AnimationEvent>();
+    readonly animationStateChanged: EventEmitter<AnimationEvent> = new EventEmitter<AnimationEvent>();
 
     constructor(
         public dialogRef: SpinnerOverlayRef,

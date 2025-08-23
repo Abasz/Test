@@ -44,11 +44,11 @@ import { SettingsBarComponent } from "./settings-bar/settings-bar.component";
     ],
 })
 export class DashboardComponent implements AfterViewInit, OnDestroy {
-    BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
+    readonly BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
 
-    elapseTime: Signal<number>;
-    heartRateData: Signal<IHeartRate | undefined> = toSignal(this.metricsService.heartRateData$);
-    rowingData: Signal<ICalculatedMetrics> = toSignal(this.metricsService.allMetrics$, {
+    readonly elapseTime: Signal<number>;
+    readonly heartRateData: Signal<IHeartRate | undefined> = toSignal(this.metricsService.heartRateData$);
+    readonly rowingData: Signal<ICalculatedMetrics> = toSignal(this.metricsService.allMetrics$, {
         initialValue: {
             activityStartTime: new Date(),
             avgStrokePower: 0,
@@ -139,22 +139,42 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
         }
         this.utils.enableWakeLock();
 
+        if (isSecureContext !== true || navigator.bluetooth === undefined) {
+            this.snackBar.open("Bluetooth API is not available", "Dismiss", {
+                duration: undefined,
+            });
+        }
+
         if (navigator.storage === undefined) {
             console.error("StorageManager API is not found or not supported");
 
             return;
         }
 
-        if (!(await navigator.storage.persisted())) {
+        try {
+            if (await navigator.storage.persisted()) {
+                return;
+            }
+        } catch (error) {
+            this.snackBar.open("Error while checking storage persistence", "Dismiss", {
+                duration: undefined,
+            });
+
+            console.error("Error checking storage persistence:", error);
+
+            return;
+        }
+
+        try {
             if (!(await navigator.storage.persist())) {
                 console.warn("Failed to make storage persisted");
             }
-        }
-
-        if (!isSecureContext || navigator.bluetooth === undefined) {
-            this.snackBar.open("Bluetooth API is not available", "Dismiss", {
+        } catch (error) {
+            this.snackBar.open("Error while making storage persistent", "Dismiss", {
                 duration: undefined,
             });
+
+            console.error("Error making storage persistent:", error);
         }
     }
 

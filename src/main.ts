@@ -1,6 +1,6 @@
 import { MediaMatcher } from "@angular/cdk/layout";
 import { HTTP_INTERCEPTORS } from "@angular/common/http";
-import { DestroyRef, importProvidersFrom, isDevMode } from "@angular/core";
+import { DestroyRef, importProvidersFrom, isDevMode, provideZonelessChangeDetection } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { provideAnimations } from "@angular/platform-browser/animations";
@@ -16,6 +16,7 @@ import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
 
 bootstrapApplication(AppComponent, {
     providers: [
+        provideZonelessChangeDetection(),
         provideRouter([
             {
                 path: "",
@@ -40,7 +41,7 @@ bootstrapApplication(AppComponent, {
         {
             provide: AntHeartRateService,
             useFactory: (snack: MatSnackBar, destroyRef: DestroyRef): AntHeartRateService => {
-                if (isSecureContext) {
+                if (isSecureContext === true) {
                     return new AntHeartRateService(snack, destroyRef);
                 }
 
@@ -66,7 +67,6 @@ bootstrapApplication(AppComponent, {
         /(?<ios>iPad|iPhone|iPod)|(?<ipadmac>Macintosh).*?(?=\))(?=.*?Mobile)|(?<browser>CriOS|Chrome|Safari|Firefox|Edg)/,
     );
 
-    // Show and populate the error overlay from index.html
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");
     const advice = document.getElementById("global-error-advice");

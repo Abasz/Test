@@ -1,24 +1,19 @@
+import { provideZonelessChangeDetection } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { MAT_DIALOG_DATA, MatDialogRef } from "@angular/material/dialog";
 import { MatSnackBar } from "@angular/material/snack-bar";
-import { NoopAnimationsModule } from "@angular/platform-browser/animations";
 import { SwUpdate } from "@angular/service-worker";
 import { BehaviorSubject, EMPTY, of, take } from "rxjs";
 
 import { IDeviceInformation } from "../../common/ble.interfaces";
-import {
-    IErgConnectionStatus,
-    IRowerSettings,
-    IStrokeDetectionSettings,
-    StrokeDetectionType,
-} from "../../common/common.interfaces";
+import { IErgConnectionStatus, IRowerSettings } from "../../common/common.interfaces";
 import { SpinnerOverlay } from "../../common/overlay/spinner-overlay.service";
 import { ConfigManagerService } from "../../common/services/config-manager.service";
+import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 import { ErgSettingsService } from "../../common/services/ergometer/erg-settings.service";
 import { UtilsService } from "../../common/services/utils.service";
 
 import { SettingsDialogComponent } from "./settings-dialog.component";
-import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 
 interface IMockGeneralForm {
     dirty: boolean;
@@ -26,7 +21,7 @@ interface IMockGeneralForm {
     value: Record<string, unknown>;
 }
 
-interface IMockAdvancedForm {
+interface IMockRowingForm {
     dirty: boolean;
     controls: Record<string, { dirty: boolean; getRawValue: () => unknown }>;
     value: Record<string, unknown>;
@@ -44,14 +39,14 @@ if (!navigator.bluetooth.getDevices) {
 describe("SettingsDialogComponent", (): void => {
     let component: SettingsDialogComponent;
     let fixture: ComponentFixture<SettingsDialogComponent>;
-    let mockMatDialogRef: Partial<MatDialogRef<SettingsDialogComponent>>;
-    let mockConfigManagerService: Partial<ConfigManagerService>;
-    let mockErgSettingsService: Partial<ErgSettingsService>;
-    let mockErgConnectionService: Partial<ErgConnectionService>;
-    let mockSnackBar: Partial<MatSnackBar>;
-    let mockSpinnerOverlay: Partial<SpinnerOverlay>;
-    let mockUtilsService: Partial<UtilsService>;
-    let mockSwUpdate: Partial<SwUpdate>;
+    let mockMatDialogRef: jasmine.SpyObj<MatDialogRef<SettingsDialogComponent>>;
+    let mockConfigManagerService: jasmine.SpyObj<ConfigManagerService>;
+    let mockErgSettingsService: jasmine.SpyObj<ErgSettingsService>;
+    let mockErgConnectionService: jasmine.SpyObj<ErgConnectionService>;
+    let mockSnackBar: jasmine.SpyObj<MatSnackBar>;
+    let mockSpinnerOverlay: jasmine.SpyObj<SpinnerOverlay>;
+    let mockUtilsService: jasmine.SpyObj<UtilsService>;
+    let mockSwUpdate: jasmine.SpyObj<SwUpdate>;
     let breakpointSubject: BehaviorSubject<{ maxW599: boolean }>;
 
     // helper functions to reduce duplication
@@ -91,13 +86,13 @@ describe("SettingsDialogComponent", (): void => {
         };
     };
 
-    const createMockAdvancedForm: (
+    const createMockRowingForm: (
         dirty?: boolean,
         controlValues?: Record<string, unknown>,
-    ) => IMockAdvancedForm = (
+    ) => IMockRowingForm = (
         dirty: boolean = false,
         controlValues: Record<string, unknown> = {},
-    ): IMockAdvancedForm => {
+    ): IMockRowingForm => {
         const defaultControlValues: Record<string, unknown> = {
             machineSettings: {},
             dragFactorSettings: {},
@@ -128,15 +123,15 @@ describe("SettingsDialogComponent", (): void => {
 
     const setupMockChildComponents: (
         generalFormDirty?: boolean,
-        advancedFormDirty?: boolean,
+        rowingFormDirty?: boolean,
         isProfileLoaded?: boolean,
     ) => void = (
         generalFormDirty: boolean = false,
-        advancedFormDirty: boolean = false,
+        rowingFormDirty: boolean = false,
         isProfileLoaded: boolean = false,
     ): void => {
         const mockGeneralForm = createMockGeneralForm(generalFormDirty);
-        const mockAdvancedForm = createMockAdvancedForm(advancedFormDirty);
+        const mockRowingForm = createMockRowingForm(rowingFormDirty);
 
         // check if generalSettings is already spied upon
         try {
@@ -154,64 +149,67 @@ describe("SettingsDialogComponent", (): void => {
 
         component.onGeneralFormValidityChange(true);
 
-        // check if advancedSettings is already spied upon
+        // check if rowingSettings is already spied upon
         try {
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
         } catch {
             // already spied, just update the return value
             (
-                (component as unknown as Record<string, jasmine.Spy>).advancedSettings as jasmine.Spy
+                (component as unknown as Record<string, jasmine.Spy>).rowingSettings as jasmine.Spy
             ).and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
         }
 
-        component.onRowerFormValidityChange(true);
+        component.onRowingFormValidityChange(true);
     };
 
     beforeEach(async (): Promise<void> => {
         const mockRowerSettings: IRowerSettings = {
-            bleServiceFlag: 0,
-            logLevel: 1,
-            logToSdCard: false,
-            logDeltaTimes: false,
-            isRuntimeSettingsEnabled: false,
-            machineSettings: {
-                flywheelInertia: 0.05,
-                magicConstant: 2.8,
-                sprocketRadius: 1.5,
-                impulsePerRevolution: 11,
+            generalSettings: {
+                bleServiceFlag: 0,
+                logLevel: 1,
+                logToSdCard: false,
+                logDeltaTimes: false,
+                isRuntimeSettingsEnabled: false,
+                isCompiledWithDouble: true,
             },
-            sensorSignalSettings: {
-                rotationDebounceTime: 25,
-                rowingStoppedThreshold: 3000,
+            rowingSettings: {
+                machineSettings: {
+                    flywheelInertia: 0.05,
+                    magicConstant: 2.8,
+                    sprocketRadius: 1.5,
+                    impulsePerRevolution: 11,
+                },
+                sensorSignalSettings: {
+                    rotationDebounceTime: 25,
+                    rowingStoppedThreshold: 3000,
+                },
+                dragFactorSettings: {
+                    goodnessOfFitThreshold: 0.96,
+                    maxDragFactorRecoveryPeriod: 8,
+                    dragFactorLowerThreshold: 90,
+                    dragFactorUpperThreshold: 220,
+                    dragCoefficientsArrayLength: 4,
+                },
+                strokeDetectionSettings: {
+                    strokeDetectionType: 0,
+                    impulseDataArrayLength: 6,
+                    minimumPoweredTorque: 0.01,
+                    minimumDragTorque: 0.005,
+                    minimumRecoverySlopeMargin: 0.05,
+                    minimumRecoverySlope: 0.1,
+                    minimumRecoveryTime: 400,
+                    minimumDriveTime: 200,
+                    driveHandleForcesMaxCapacity: 20,
+                },
             },
-            dragFactorSettings: {
-                goodnessOfFitThreshold: 0.96,
-                maxDragFactorRecoveryPeriod: 8,
-                dragFactorLowerThreshold: 90,
-                dragFactorUpperThreshold: 220,
-                dragCoefficientsArrayLength: 4,
-            },
-        };
-
-        const mockStrokeDetectionSettings: IStrokeDetectionSettings = {
-            strokeDetectionType: StrokeDetectionType.Torque,
-            impulseDataArrayLength: 6,
-            minimumPoweredTorque: 0.01,
-            minimumDragTorque: 0.005,
-            minimumRecoverySlopeMargin: 0.05,
-            minimumRecoverySlope: 0.1,
-            minimumRecoveryTime: 400,
-            minimumDriveTime: 200,
-            driveHandleForcesMaxCapacity: 20,
-            isCompiledWithDouble: true,
         };
 
         const mockErgConnectionStatus: IErgConnectionStatus = {
@@ -227,78 +225,70 @@ describe("SettingsDialogComponent", (): void => {
 
         const mockDialogData = {
             rowerSettings: mockRowerSettings,
-            strokeDetectionSettings: mockStrokeDetectionSettings,
             ergConnectionStatus: mockErgConnectionStatus,
             deviceInfo: mockDeviceInfo,
         };
 
-        mockMatDialogRef = {
-            close: jasmine.createSpy("close"),
-            disableClose: false,
-            updateSize: jasmine.createSpy("updateSize"),
-            backdropClick: jasmine.createSpy("backdropClick").and.returnValue(of({})),
-            keydownEvents: jasmine.createSpy("keydownEvents").and.returnValue(of({})),
-        };
+        mockMatDialogRef = jasmine.createSpyObj<MatDialogRef<SettingsDialogComponent>>("MatDialogRef", [
+            "close",
+            "updateSize",
+            "backdropClick",
+            "keydownEvents",
+        ]);
+        mockMatDialogRef.disableClose = false;
+        mockMatDialogRef.backdropClick.and.returnValue(of({} as MouseEvent));
+        mockMatDialogRef.keydownEvents.and.returnValue(of({} as KeyboardEvent));
 
-        mockConfigManagerService = {
-            getItem: jasmine.createSpy("getItem").and.returnValue("ble"),
-            setItem: jasmine.createSpy("setItem"),
-        };
+        mockConfigManagerService = jasmine.createSpyObj<ConfigManagerService>("ConfigManagerService", [
+            "getItem",
+            "setItem",
+        ]);
+        mockConfigManagerService.getItem.and.returnValue("ble");
 
-        mockErgSettingsService = {
-            changeLogLevel: jasmine.createSpy("changeLogLevel").and.returnValue(Promise.resolve()),
-            changeDeltaTimeLogging: jasmine
-                .createSpy("changeDeltaTimeLogging")
-                .and.returnValue(Promise.resolve()),
-            changeLogToSdCard: jasmine.createSpy("changeLogToSdCard").and.returnValue(Promise.resolve()),
-            changeBleServiceType: jasmine
-                .createSpy("changeBleServiceType")
-                .and.returnValue(Promise.resolve()),
-            changeMachineSettings: jasmine
-                .createSpy("changeMachineSettings")
-                .and.returnValue(Promise.resolve()),
-            changeDragFactorSettings: jasmine
-                .createSpy("changeDragFactorSettings")
-                .and.returnValue(Promise.resolve()),
-            changeSensorSignalSettings: jasmine
-                .createSpy("changeSensorSignalSettings")
-                .and.returnValue(Promise.resolve()),
-            changeStrokeSettings: jasmine
-                .createSpy("changeStrokeSettings")
-                .and.returnValue(Promise.resolve()),
-            restartDevice: jasmine.createSpy("restartDevice").and.returnValue(Promise.resolve()),
-        };
+        mockErgSettingsService = jasmine.createSpyObj<ErgSettingsService>("ErgSettingsService", [
+            "changeLogLevel",
+            "changeDeltaTimeLogging",
+            "changeLogToSdCard",
+            "changeBleServiceType",
+            "changeMachineSettings",
+            "changeDragFactorSettings",
+            "changeSensorSignalSettings",
+            "changeStrokeSettings",
+            "restartDevice",
+        ]);
+        mockErgSettingsService.changeLogLevel.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeDeltaTimeLogging.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeLogToSdCard.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeBleServiceType.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeMachineSettings.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeDragFactorSettings.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeSensorSignalSettings.and.returnValue(Promise.resolve());
+        mockErgSettingsService.changeStrokeSettings.and.returnValue(Promise.resolve());
+        mockErgSettingsService.restartDevice.and.returnValue(Promise.resolve());
 
-        mockErgConnectionService = {
-            reconnect: jasmine.createSpy("reconnect").and.returnValue(Promise.resolve()),
-        };
+        mockErgConnectionService = jasmine.createSpyObj<ErgConnectionService>("ErgConnectionService", [
+            "reconnect",
+        ]);
+        mockErgConnectionService.reconnect.and.returnValue(Promise.resolve());
 
-        mockSnackBar = {
-            open: jasmine.createSpy("open"),
-            openFromComponent: jasmine.createSpy("openFromComponent").and.returnValue({
-                onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
-            }),
-        };
+        mockSnackBar = jasmine.createSpyObj<MatSnackBar>("MatSnackBar", ["open", "openFromComponent"]);
+        mockSnackBar.openFromComponent.and.returnValue({
+            onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
+        } as unknown as ReturnType<MatSnackBar["openFromComponent"]>);
 
-        mockSpinnerOverlay = {
-            open: jasmine.createSpy("open"),
-        };
+        mockSpinnerOverlay = jasmine.createSpyObj<SpinnerOverlay>("SpinnerOverlay", ["open"]);
 
         breakpointSubject = new BehaviorSubject<{ maxW599: boolean }>({ maxW599: false });
 
-        mockUtilsService = {
-            breakpointHelper: jasmine
-                .createSpy("breakpointHelper")
-                .and.returnValue(breakpointSubject.asObservable()),
-        };
+        mockUtilsService = jasmine.createSpyObj<UtilsService>("UtilsService", ["breakpointHelper"]);
+        mockUtilsService.breakpointHelper.and.returnValue(breakpointSubject.asObservable());
 
-        mockSwUpdate = {
-            checkForUpdate: jasmine.createSpy("checkForUpdate"),
+        mockSwUpdate = jasmine.createSpyObj<SwUpdate>("SwUpdate", ["checkForUpdate"], {
             isEnabled: false,
-        };
+        });
 
         await TestBed.configureTestingModule({
-            imports: [SettingsDialogComponent, NoopAnimationsModule],
+            imports: [SettingsDialogComponent],
             providers: [
                 { provide: MatDialogRef, useValue: mockMatDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: mockDialogData },
@@ -309,6 +299,7 @@ describe("SettingsDialogComponent", (): void => {
                 { provide: UtilsService, useValue: mockUtilsService },
                 { provide: SwUpdate, useValue: mockSwUpdate },
                 { provide: ErgConnectionService, useValue: mockErgConnectionService },
+                provideZonelessChangeDetection(),
             ],
         }).compileComponents();
 
@@ -367,7 +358,8 @@ describe("SettingsDialogComponent", (): void => {
         it("should receive correct data from MAT_DIALOG_DATA injection", (): void => {
             expect(component.data).toBeDefined();
             expect(component.data.rowerSettings).toBeDefined();
-            expect(component.data.strokeDetectionSettings).toBeDefined();
+            expect(component.data.rowerSettings.generalSettings).toBeDefined();
+            expect(component.data.rowerSettings.rowingSettings).toBeDefined();
             expect(component.data.ergConnectionStatus).toBeDefined();
             expect(component.data.deviceInfo).toBeDefined();
 
@@ -390,14 +382,14 @@ describe("SettingsDialogComponent", (): void => {
 
             setupMockChildComponents(false, false, false);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
             fixture.detectChanges();
 
             expect(saveButton.disabled).toBe(true);
 
             setupMockChildComponents(true, true, false);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
             fixture.detectChanges();
 
             expect(saveButton.disabled).toBe(false);
@@ -452,7 +444,7 @@ describe("SettingsDialogComponent", (): void => {
             expect(tabGroup).toBeTruthy();
             expect(tabGroup.getAttribute("ng-reflect-selected-index")).toBeDefined();
             expect(component.generalSettings).toBeDefined();
-            expect(component.advancedSettings).toBeDefined();
+            expect(component.rowingSettings).toBeDefined();
         });
 
         it("should update currentTabIndex when onTabChange is called", (): void => {
@@ -473,16 +465,16 @@ describe("SettingsDialogComponent", (): void => {
             expect(component.currentTabIndex()).toBe(1);
 
             const generalForm = component.generalSettings().getForm();
-            const advancedForm = component.advancedSettings().getForm();
+            const rowingForm = component.rowingSettings().getForm();
             expect(generalForm.dirty).toBe(true);
-            expect(advancedForm.dirty).toBe(false);
+            expect(rowingForm.dirty).toBe(false);
         });
 
         it("should update save button state when switching", (): void => {
             setupMockChildComponents(true, true);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
 
             component.currentTabIndex.set(0);
             expect(component.isSaveButtonEnabled()).toBe(true);
@@ -490,7 +482,7 @@ describe("SettingsDialogComponent", (): void => {
             component.onTabChange(1);
             expect(component.isSaveButtonEnabled()).toBe(false);
 
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
             expect(component.isSaveButtonEnabled()).toBe(true);
 
             component.onTabChange(0);
@@ -501,21 +493,21 @@ describe("SettingsDialogComponent", (): void => {
     describe("form validation state", (): void => {
         it("should be invalid when both forms are invalid", (): void => {
             component.onGeneralFormValidityChange(false);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
 
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
 
         it("should be invalid when only general form is valid", (): void => {
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
 
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
 
-        it("should be invalid when only rower form is valid", (): void => {
+        it("should be invalid when only rowing form is valid", (): void => {
             component.onGeneralFormValidityChange(false);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
@@ -523,7 +515,7 @@ describe("SettingsDialogComponent", (): void => {
         it("should be valid when both forms are valid", (): void => {
             setupMockChildComponents(true, true, false);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             component.currentTabIndex.set(0);
             expect(component.isSaveButtonEnabled()).toBe(true);
@@ -538,7 +530,7 @@ describe("SettingsDialogComponent", (): void => {
                 component.currentTabIndex.set(0);
 
                 component.onGeneralFormValidityChange(false);
-                component.onRowerFormValidityChange(true);
+                component.onRowingFormValidityChange(true);
                 expect(component.isSaveButtonEnabled()).toBe(false);
                 component.onGeneralFormValidityChange(true);
                 expect(component.isSaveButtonEnabled()).toBe(true);
@@ -546,16 +538,16 @@ describe("SettingsDialogComponent", (): void => {
                 expect(component.isSaveButtonEnabled()).toBe(false);
             });
 
-            it("should reflect changes in rower form validity", (): void => {
+            it("should reflect changes in rowing form validity", (): void => {
                 setupMockChildComponents(true, true, false);
                 component.currentTabIndex.set(1);
 
                 component.onGeneralFormValidityChange(true);
-                component.onRowerFormValidityChange(false);
+                component.onRowingFormValidityChange(false);
                 expect(component.isSaveButtonEnabled()).toBe(false);
-                component.onRowerFormValidityChange(true);
+                component.onRowingFormValidityChange(true);
                 expect(component.isSaveButtonEnabled()).toBe(true);
-                component.onRowerFormValidityChange(false);
+                component.onRowingFormValidityChange(false);
                 expect(component.isSaveButtonEnabled()).toBe(false);
             });
         });
@@ -563,26 +555,26 @@ describe("SettingsDialogComponent", (): void => {
         it("should enable save button when switching tabs based on tab-specific conditions", (): void => {
             setupMockChildComponents(true, true, false);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             // start on general tab - should be enabled
             component.currentTabIndex.set(0);
             expect(component.isSaveButtonEnabled()).toBe(true);
 
-            // switch to rower tab - should still be enabled
+            // switch to rowing tab - should still be enabled
             component.currentTabIndex.set(1);
             expect(component.isSaveButtonEnabled()).toBe(true);
 
             // now with profile loaded but clean forms
             setupMockChildComponents(false, false, true);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             // general tab with clean forms - should be disabled
             component.currentTabIndex.set(0);
             expect(component.isSaveButtonEnabled()).toBe(false);
 
-            // rower tab with clean forms but profile loaded - should be enabled
+            // rowing tab with clean forms but profile loaded - should be enabled
             component.currentTabIndex.set(1);
             expect(component.isSaveButtonEnabled()).toBe(true);
         });
@@ -594,25 +586,25 @@ describe("SettingsDialogComponent", (): void => {
                 }),
                 valid: false,
             };
-            const mockAdvancedForm = createMockAdvancedForm(false);
+            const mockRowingForm = createMockRowingForm(false);
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded: false,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
             component.onGeneralFormValidityChange(false);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
             component.currentTabIndex.set(0);
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
 
-        it("should disable save button when rower form is invalid even when dirty", (): void => {
+        it("should disable save button when rowing form is invalid even when dirty", (): void => {
             const mockGeneralForm = createMockGeneralForm(true);
-            const mockAdvancedForm = {
-                ...createMockAdvancedForm(true, {
+            const mockRowingForm = {
+                ...createMockRowingForm(true, {
                     machineSettings: { flywheelInertia: 0.06 },
                 }),
                 valid: false,
@@ -620,13 +612,13 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded: false,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
             component.currentTabIndex.set(1);
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
@@ -636,7 +628,7 @@ describe("SettingsDialogComponent", (): void => {
             component.handleDialogClose();
             expect(mockSnackBar.openFromComponent).toHaveBeenCalled();
 
-            (mockSnackBar.openFromComponent as jasmine.Spy).calls.reset();
+            mockSnackBar.openFromComponent.calls.reset();
 
             setupMockChildComponents(false, false);
             component.handleDialogClose();
@@ -645,21 +637,21 @@ describe("SettingsDialogComponent", (): void => {
         });
     });
 
-    describe("when rower profile is loaded", (): void => {
-        it("should enable save button on rower tab even if form is pristine", (): void => {
+    describe("when rowing profile is loaded", (): void => {
+        it("should enable save button on rowing tab even if form is pristine", (): void => {
             setupMockChildComponents(false, false, true);
             component.currentTabIndex.set(1);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             expect(component.isSaveButtonEnabled()).toBe(true);
         });
 
-        it("should enable save even with invalid forms on rower tab", (): void => {
+        it("should enable save even with invalid forms on rowing tab", (): void => {
             setupMockChildComponents(false, false, true);
             component.currentTabIndex.set(1);
             component.onGeneralFormValidityChange(false);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             expect(component.isSaveButtonEnabled()).toBe(true);
         });
@@ -668,36 +660,38 @@ describe("SettingsDialogComponent", (): void => {
             setupMockChildComponents(false, false, true);
             component.currentTabIndex.set(0);
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             expect(component.isSaveButtonEnabled()).toBe(false);
         });
 
-        it("should save rower settings even if not dirty", async (): Promise<void> => {
+        it("should save rowing settings even if not dirty", async (): Promise<void> => {
             const mockGeneralForm = createMockGeneralForm(false);
-            const mockAdvancedForm = createMockAdvancedForm(false, {
+            const mockRowingForm = createMockRowingForm(false, {
                 machineSettings: { flywheelInertia: 0.06 },
             });
 
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded: true,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(false);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             component.currentTabIndex.set(1);
 
             await component.saveSettings();
 
-            expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith({
-                flywheelInertia: 0.06,
-            });
+            expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith(
+                jasmine.objectContaining({
+                    flywheelInertia: 0.06,
+                }),
+            );
             expect(mockMatDialogRef.close).toHaveBeenCalled();
         });
     });
@@ -717,7 +711,7 @@ describe("SettingsDialogComponent", (): void => {
                     heartRateMonitor: "ant",
                 },
             };
-            const mockAdvancedForm = {
+            const mockRowingForm = {
                 dirty: false,
                 controls: {
                     machineSettings: { dirty: false, getRawValue: (): object => ({}) },
@@ -730,13 +724,13 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             component.currentTabIndex.set(1);
 
@@ -750,18 +744,18 @@ describe("SettingsDialogComponent", (): void => {
             expect(mockMatDialogRef.close).toHaveBeenCalled();
         });
 
-        describe("should save advanced settings", async (): Promise<void> => {
+        describe("should save rowing settings", async (): Promise<void> => {
             it("when both debounce and max drag period decrease first drag factor settings then sensor settings", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     dragFactorSettings: { maxDragFactorRecoveryPeriod: 7 },
                     sensorSignalSettings: { rotationDebounceTime: 20 },
                 });
 
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
 
                 await component.saveSettings();
 
@@ -771,16 +765,16 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("when both debounce and max drag period increase first sensor settings then drag factor settings", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     dragFactorSettings: { maxDragFactorRecoveryPeriod: 9 },
                     sensorSignalSettings: { rotationDebounceTime: 30 },
                 });
 
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
 
                 await component.saveSettings();
 
@@ -790,15 +784,15 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("when debounce and drag period value change direction is opposite first drag factor settings then sensor settings", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     dragFactorSettings: { maxDragFactorRecoveryPeriod: 9 },
                     sensorSignalSettings: { rotationDebounceTime: 20 },
                 });
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
 
                 await component.saveSettings();
 
@@ -808,15 +802,15 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("and save drag factor settings drag factor form when drag factor form is dirty", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     dragFactorSettings: { maxDragFactorRecoveryPeriod: 9 },
                     sensorSignalSettings: { dirty: false, rotationDebounceTime: 25 },
                 });
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
 
                 await component.saveSettings();
 
@@ -825,15 +819,15 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("and save sensor settings when sensor settings form is dirty", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     dragFactorSettings: { dirty: false, maxDragFactorRecoveryPeriod: 8 },
                     sensorSignalSettings: { rotationDebounceTime: 30 },
                 });
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
 
                 await component.saveSettings();
 
@@ -842,15 +836,15 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("without sensor settings or drag factor settings when neither is dirty", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(false, {
+                const mockRowingForm = createMockRowingForm(false, {
                     dragFactorSettings: { maxDragFactorRecoveryPeriod: 8 },
                     sensorSignalSettings: { rotationDebounceTime: 25 },
                 });
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(false);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(false);
 
                 await component.saveSettings();
 
@@ -859,7 +853,7 @@ describe("SettingsDialogComponent", (): void => {
             });
 
             it("with all settings when all forms are dirty", async (): Promise<void> => {
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     machineSettings: {
                         flywheelInertia: 0.06,
                     },
@@ -873,45 +867,53 @@ describe("SettingsDialogComponent", (): void => {
                         minimumPoweredTorque: 0.02,
                     },
                 });
-                spyOn(component, "advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                spyOn(component, "rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
-                component.onRowerFormValidityChange(true);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
+                component.onRowingFormValidityChange(true);
                 component.currentTabIndex.set(1);
 
                 await component.saveSettings();
 
-                expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith({
-                    flywheelInertia: 0.06,
-                });
-                expect(mockErgSettingsService.changeDragFactorSettings).toHaveBeenCalledWith({
-                    goodnessOfFitThreshold: 0.95,
-                });
-                expect(mockErgSettingsService.changeSensorSignalSettings).toHaveBeenCalledWith({
-                    rotationDebounceTime: 30,
-                });
-                expect(mockErgSettingsService.changeStrokeSettings).toHaveBeenCalledWith({
-                    minimumPoweredTorque: 0.02,
-                });
+                expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith(
+                    jasmine.objectContaining({
+                        flywheelInertia: 0.06,
+                    }),
+                );
+                expect(mockErgSettingsService.changeDragFactorSettings).toHaveBeenCalledWith(
+                    jasmine.objectContaining({
+                        goodnessOfFitThreshold: 0.95,
+                    }),
+                );
+                expect(mockErgSettingsService.changeSensorSignalSettings).toHaveBeenCalledWith(
+                    jasmine.objectContaining({
+                        rotationDebounceTime: 30,
+                    }),
+                );
+                expect(mockErgSettingsService.changeStrokeSettings).toHaveBeenCalledWith(
+                    jasmine.objectContaining({
+                        minimumPoweredTorque: 0.02,
+                    }),
+                );
                 expect(mockMatDialogRef.close).toHaveBeenCalled();
             });
 
             describe("and when any of the forms are dirty", (): void => {
-                let mockAdvancedForm: ReturnType<typeof createMockAdvancedForm>;
+                let mockRowingForm: ReturnType<typeof createMockRowingForm>;
                 beforeEach((): void => {
-                    mockAdvancedForm = createMockAdvancedForm(true, {
+                    mockRowingForm = createMockRowingForm(true, {
                         machineSettings: { flywheelInertia: 0.06 },
                         dragFactorSettings: { goodnessOfFitThreshold: 0.95 },
                         sensorSignalSettings: { rotationDebounceTime: 30 },
                         strokeDetectionSettings: { minimumPoweredTorque: 0.02 },
                     });
-                    spyOn(component, "advancedSettings").and.returnValue({
-                        getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                    spyOn(component, "rowingSettings").and.returnValue({
+                        getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                         saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                         isProfileLoaded: false,
-                    } as unknown as ReturnType<typeof component.advancedSettings>);
-                    component.onRowerFormValidityChange(true);
+                    } as unknown as ReturnType<typeof component.rowingSettings>);
+                    component.onRowingFormValidityChange(true);
                 });
 
                 it("send restart device request", async (): Promise<void> => {
@@ -939,7 +941,7 @@ describe("SettingsDialogComponent", (): void => {
                 heartRateMonitor: "ant",
             });
 
-            const mockAdvancedForm = createMockAdvancedForm(true, {
+            const mockRowingForm = createMockRowingForm(true, {
                 machineSettings: { flywheelInertia: 0.06 },
                 dragFactorSettings: { goodnessOfFitThreshold: 0.95 },
                 sensorSignalSettings: { rotationDebounceTime: 30 },
@@ -949,13 +951,13 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
@@ -972,19 +974,21 @@ describe("SettingsDialogComponent", (): void => {
                 jasmine.any(Function),
                 jasmine.objectContaining({
                     data: jasmine.objectContaining({
-                        text: "Rower tab has changes, save those too?",
+                        text: "Rowing tab has changes, save those too?",
                     }),
                 }),
             );
 
-            expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith({
-                flywheelInertia: 0.06,
-            });
+            expect(mockErgSettingsService.changeMachineSettings).toHaveBeenCalledWith(
+                jasmine.objectContaining({
+                    flywheelInertia: 0.06,
+                }),
+            );
             expect(mockErgSettingsService.changeLogLevel).toHaveBeenCalledWith(2);
             expect(mockMatDialogRef.close).toHaveBeenCalled();
         });
 
-        it("should save general settings before rower on cross-tab save", async (): Promise<void> => {
+        it("should save general settings before rowing on cross-tab save", async (): Promise<void> => {
             const mockGeneralForm = createMockGeneralForm(true, {
                 logLevel: 2,
                 deltaTimeLogging: true,
@@ -993,7 +997,7 @@ describe("SettingsDialogComponent", (): void => {
                 heartRateMonitor: "ant",
             });
 
-            const mockAdvancedForm = createMockAdvancedForm(true, {
+            const mockRowingForm = createMockRowingForm(true, {
                 machineSettings: { flywheelInertia: 0.06 },
                 dragFactorSettings: { goodnessOfFitThreshold: 0.95 },
                 sensorSignalSettings: { rotationDebounceTime: 30 },
@@ -1003,13 +1007,13 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
@@ -1045,7 +1049,7 @@ describe("SettingsDialogComponent", (): void => {
                 heartRateMonitor: "ant",
             });
 
-            const mockAdvancedForm = createMockAdvancedForm(true, {
+            const mockRowingForm = createMockRowingForm(true, {
                 machineSettings: { flywheelInertia: 0.06 },
                 dragFactorSettings: { goodnessOfFitThreshold: 0.95 },
                 sensorSignalSettings: { rotationDebounceTime: 30 },
@@ -1057,13 +1061,13 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(EMPTY),
@@ -1080,7 +1084,7 @@ describe("SettingsDialogComponent", (): void => {
                 jasmine.any(Function),
                 jasmine.objectContaining({
                     data: jasmine.objectContaining({
-                        text: "Rower tab has changes, save those too?",
+                        text: "Rowing tab has changes, save those too?",
                     }),
                 }),
             );
@@ -1101,7 +1105,7 @@ describe("SettingsDialogComponent", (): void => {
                     heartRateMonitor: { dirty: false, value: "none" },
                 },
             };
-            const mockAdvancedForm = {
+            const mockRowingForm = {
                 dirty: true,
                 controls: {
                     machineSettings: { dirty: false, getRawValue: (): object => ({}) },
@@ -1114,14 +1118,14 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded: false,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(true);
+            component.onRowingFormValidityChange(true);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(of(false)),
@@ -1150,18 +1154,18 @@ describe("SettingsDialogComponent", (): void => {
             const mockGeneralForm = createMockGeneralForm(true, {
                 logLevel: 2,
             });
-            const mockAdvancedForm = createMockAdvancedForm(false);
+            const mockRowingForm = createMockRowingForm(false);
 
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
-                getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+            spyOn(component, "rowingSettings").and.returnValue({
+                getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
@@ -1204,9 +1208,9 @@ describe("SettingsDialogComponent", (): void => {
             spyOn(component, "generalSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(mockGeneralForm),
             } as unknown as ReturnType<typeof component.generalSettings>);
-            spyOn(component, "advancedSettings").and.returnValue({
+            spyOn(component, "rowingSettings").and.returnValue({
                 getForm: jasmine.createSpy("getForm").and.returnValue(
-                    createMockAdvancedForm(false, {
+                    createMockRowingForm(false, {
                         machineSettings: {},
                         dragFactorSettings: {},
                         sensorSignalSettings: {},
@@ -1215,10 +1219,10 @@ describe("SettingsDialogComponent", (): void => {
                 ),
                 saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
                 isProfileLoaded: false,
-            } as unknown as ReturnType<typeof component.advancedSettings>);
+            } as unknown as ReturnType<typeof component.rowingSettings>);
 
             component.onGeneralFormValidityChange(true);
-            component.onRowerFormValidityChange(false);
+            component.onRowingFormValidityChange(false);
 
             const mockSnackBarRef = {
                 onAction: jasmine.createSpy("onAction").and.returnValue(of(true)),
@@ -1232,7 +1236,7 @@ describe("SettingsDialogComponent", (): void => {
             await expectAsync(component.saveSettings()).toBeRejected();
         });
 
-        it("should be handled when saving advanced settings", async (): Promise<void> => {
+        it("should be handled when saving rowing settings", async (): Promise<void> => {
             const serviceErrors = [
                 { service: "changeMachineSettings", error: "Machine settings error" },
                 { service: "changeDragFactorSettings", error: "Drag factor error" },
@@ -1243,23 +1247,18 @@ describe("SettingsDialogComponent", (): void => {
             for (const { service, error } of serviceErrors) {
                 mockErgSettingsService.changeMachineSettings = jasmine
                     .createSpy("changeMachineSettings")
-                    .and.returnValue(Promise.resolve());
+                    .and.rejectWith(new Error(error));
                 mockErgSettingsService.changeDragFactorSettings = jasmine
                     .createSpy("changeDragFactorSettings")
-                    .and.returnValue(Promise.resolve());
+                    .and.rejectWith(new Error(error));
                 mockErgSettingsService.changeSensorSignalSettings = jasmine
                     .createSpy("changeSensorSignalSettings")
-                    .and.returnValue(Promise.resolve());
+                    .and.rejectWith(new Error(error));
                 mockErgSettingsService.changeStrokeSettings = jasmine
                     .createSpy("changeStrokeSettings")
-                    .and.returnValue(Promise.resolve());
+                    .and.rejectWith(new Error(error));
 
-                const serviceMethod = service as keyof typeof mockErgSettingsService;
-                (mockErgSettingsService[serviceMethod] as jasmine.Spy) = jasmine
-                    .createSpy(service)
-                    .and.returnValue(Promise.reject(new Error(error)));
-
-                const mockAdvancedForm = createMockAdvancedForm(true, {
+                const mockRowingForm = createMockRowingForm(true, {
                     machineSettings: { flywheelInertia: 0.06 },
                     dragFactorSettings: { goodnessOfFitThreshold: 0.95 },
                     sensorSignalSettings: { rotationDebounceTime: 30 },
@@ -1270,16 +1269,16 @@ describe("SettingsDialogComponent", (): void => {
                     getForm: jasmine.createSpy("getForm").and.returnValue(createMockGeneralForm(false)),
                 } as unknown as ReturnType<typeof component.generalSettings>);
 
-                const advancedSettingsSpy = jasmine.createSpy("advancedSettings").and.returnValue({
-                    getForm: jasmine.createSpy("getForm").and.returnValue(mockAdvancedForm),
+                const rowingSettingsSpy = jasmine.createSpy("rowingSettings").and.returnValue({
+                    getForm: jasmine.createSpy("getForm").and.returnValue(mockRowingForm),
                     saveAsCustomProfile: jasmine.createSpy("saveAsCustomProfile"),
-                } as unknown as ReturnType<typeof component.advancedSettings>);
+                } as unknown as ReturnType<typeof component.rowingSettings>);
 
                 (component as unknown as Record<string, unknown>).generalSettings = generalSettingsSpy;
-                (component as unknown as Record<string, unknown>).advancedSettings = advancedSettingsSpy;
+                (component as unknown as Record<string, unknown>).rowingSettings = rowingSettingsSpy;
 
                 component.onGeneralFormValidityChange(false);
-                component.onRowerFormValidityChange(true);
+                component.onRowingFormValidityChange(true);
 
                 component.currentTabIndex.set(0);
 

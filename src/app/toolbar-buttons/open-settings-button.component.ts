@@ -5,11 +5,7 @@ import { MatDialog } from "@angular/material/dialog";
 import { MatIcon } from "@angular/material/icon";
 import { MatTooltip } from "@angular/material/tooltip";
 
-import {
-    IErgConnectionStatus,
-    IRowerSettings,
-    IStrokeDetectionSettings,
-} from "../../common/common.interfaces";
+import { IErgConnectionStatus, IRowerSettings } from "../../common/common.interfaces";
 import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 import { ErgGenericDataService } from "../../common/services/ergometer/erg-generic-data.service";
 import { ErgSettingsService } from "../../common/services/ergometer/erg-settings.service";
@@ -24,19 +20,16 @@ import { SettingsDialogComponent } from "../settings-dialog/settings-dialog.comp
     imports: [MatIcon, MatTooltip, MatIconButton],
 })
 export class OpenSettingsButtonComponent {
-    ergConnectionStatus: Signal<IErgConnectionStatus> = toSignal(
+    readonly ergConnectionStatus: Signal<IErgConnectionStatus> = toSignal(
         this.ergConnectionService.connectionStatus$(),
         {
             requireSync: true,
         },
     );
 
-    isBleAvailable: boolean = isSecureContext && navigator.bluetooth !== undefined;
+    readonly isBleAvailable: boolean = isSecureContext && navigator.bluetooth !== undefined;
 
-    rowerSettings: Signal<IRowerSettings> = this.ergSettingsService.rowerSettings;
-
-    strokeDetectionSettings: Signal<IStrokeDetectionSettings> =
-        this.ergSettingsService.strokeDetectionSettings;
+    readonly rowerSettings: Signal<IRowerSettings> = this.ergSettingsService.rowerSettings;
 
     constructor(
         private ergGenericDataService: ErgGenericDataService,
@@ -54,7 +47,6 @@ export class OpenSettingsButtonComponent {
             autoFocus: false,
             data: {
                 rowerSettings: this.rowerSettings(),
-                strokeDetectionSettings: this.strokeDetectionSettings(),
                 ergConnectionStatus: this.ergConnectionStatus(),
                 deviceInfo,
             },

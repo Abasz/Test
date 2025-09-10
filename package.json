@@ -14,7 +14,7 @@
         "fetch-profiles": "npm run build:tools && node out-tsc/tools/fetch-profiles.js"
     },
     "browserslist": [
-        "defaults and fully supports es6-module",
+        "defaults and fully supports es6-module"
     ],
     "private": true,
     "dependencies": {

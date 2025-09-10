@@ -36,6 +36,10 @@ export class AppComponent implements AfterViewInit {
                 takeUntilDestroyed(),
             )
             .subscribe((): void => {
+                if (this.firmwareUpdateChecker.isUpdateAvailable() !== undefined) {
+                    return;
+                }
+
                 this.firmwareUpdateChecker.checkForFirmwareUpdate();
             });
 

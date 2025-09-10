@@ -171,6 +171,26 @@ describe("ErgGenericDataService", (): void => {
         });
     });
 
+    describe("deviceInfo$ observable", (): void => {
+        it("should not call readDeviceInfo multiple times for multiple deviceInfo$ subscriptions due to shareReplay", (): void => {
+            const getPrimaryServiceSpy = (
+                mockBluetoothDevice.gatt as jasmine.SpyObj<BluetoothRemoteGATTServer>
+            ).getPrimaryService as jasmine.Spy;
+
+            const subscription1 = ergGenericDataService.deviceInfo$.subscribe();
+            const subscription2 = ergGenericDataService.deviceInfo$.subscribe();
+            const subscription3 = ergGenericDataService.deviceInfo$.subscribe();
+
+            connectionStatusSubject.next({ status: "connected" });
+
+            expect(getPrimaryServiceSpy).toHaveBeenCalledTimes(1);
+
+            subscription1.unsubscribe();
+            subscription2.unsubscribe();
+            subscription3.unsubscribe();
+        });
+    });
+
     describe("deviceInfo signal", (): void => {
         beforeEach((): void => {
             mockModelNumberCharacteristic.readValue.and.resolveTo(

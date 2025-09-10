@@ -74,7 +74,7 @@
             <span>FW Version: {{ deviceInfo().firmwareNumber ?? "unknown" }}</span>
             <button
                 matTooltipShowDelay="1000"
-                matTooltip="Check for update"
+                matTooltip="Upload firmware"
                 class="small-icon-button"
                 mat-icon-button
                 (click)="fileInput.click()"
@@ -83,21 +83,36 @@
                 <mat-icon>upload_file</mat-icon>
             </button>
             <input #fileInput accept=".bin" style="display: none" type="file" (change)="otaUpdate($event)" />
-            <a href="https://github.com/Abasz/ESPRowingMonitor/releases/latest" target="_blank"
-                >update available</a
-            >
+            @if (isConnected()) {
+                <button
+                    matTooltipShowDelay="1000"
+                    matTooltip="{{
+                        firmwareUpdateCheckerService.isUpdateAvailable() === undefined ? 'Checking' : 'Check'
+                    }} for update"
+                    class="small-icon-button"
+                    mat-icon-button
+                    (click)="firmwareUpdateCheckerService.checkForFirmwareUpdate()"
+                >
+                    <mat-icon
+                        [class.rotating]="
+                            isConnected() && firmwareUpdateCheckerService.isUpdateAvailable() === undefined
+                        "
+                        >refresh</mat-icon
+                    >
+                </button>
+            }
         </div>
     </div>
     <div versionInfo class="items-center">
         <span>GUI Version: {{ compileDate | date: "yyMMddHHmmss" }}</span>
         <button
             matTooltipShowDelay="1000"
-            matTooltip="Check for update"
+            matTooltip="{{ isGuiUpdateInProgress() ? 'Checking' : 'Check' }} for update"
             class="small-icon-button"
             mat-icon-button
             (click)="checkForUpdates()"
         >
-            <mat-icon>replay</mat-icon>
+            <mat-icon [class.rotating]="isGuiUpdateInProgress()">refresh</mat-icon>
         </button>
     </div>
 </div>

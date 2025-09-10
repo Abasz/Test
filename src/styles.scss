@@ -41,9 +41,8 @@ body {
 [versionInfo] {
     display: flex;
 
-    > span,
-    a {
-        // user-select: none;
+    > span {
+        user-select: none;
         font-size: 12px;
         font-style: italic;
         margin-right: 6px;

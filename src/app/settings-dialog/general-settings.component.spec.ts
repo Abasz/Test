@@ -1,13 +1,17 @@
+import { HarnessLoader } from "@angular/cdk/testing";
+import { TestbedHarnessEnvironment } from "@angular/cdk/testing/testbed";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { ReactiveFormsModule } from "@angular/forms";
 import { MatDialog } from "@angular/material/dialog";
+import { MatTooltipHarness } from "@angular/material/tooltip/testing";
 import { SwUpdate } from "@angular/service-worker";
 import { of } from "rxjs";
 
 import { BleServiceFlag, IDeviceInformation, LogLevel } from "../../common/ble.interfaces";
 import { IRowerSettings } from "../../common/common.interfaces";
 import { ConfigManagerService } from "../../common/services/config-manager.service";
+import { FirmwareUpdateCheckerService } from "../../common/services/ergometer/firmware-update-checker.service";
 import { OtaDialogComponent } from "../ota-settings-dialog/ota-dialog.component";
 
 import { GeneralSettingsComponent } from "./general-settings.component";
@@ -15,9 +19,11 @@ import { GeneralSettingsComponent } from "./general-settings.component";
 describe("GeneralSettingsComponent", (): void => {
     let component: GeneralSettingsComponent;
     let fixture: ComponentFixture<GeneralSettingsComponent>;
+    let loader: HarnessLoader;
     let mockConfigManagerService: jasmine.SpyObj<ConfigManagerService>;
     let mockSwUpdate: jasmine.SpyObj<SwUpdate>;
     let mockMatDialog: jasmine.SpyObj<MatDialog>;
+    let mockFirmwareUpdateCheckerService: jasmine.SpyObj<FirmwareUpdateCheckerService>;
 
     const mockRowerSettings: IRowerSettings = {
         generalSettings: {
@@ -80,69 +86,448 @@ describe("GeneralSettingsComponent", (): void => {
             afterClosed: jasmine.createSpy("afterClosed").and.returnValue(of(undefined)),
         } as unknown as ReturnType<MatDialog["open"]>);
 
+        mockFirmwareUpdateCheckerService = jasmine.createSpyObj<FirmwareUpdateCheckerService>(
+            "FirmwareUpdateCheckerService",
+            ["checkForFirmwareUpdate", "isUpdateAvailable"],
+        );
+        mockFirmwareUpdateCheckerService.checkForFirmwareUpdate.and.resolveTo();
+        mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(undefined);
+
         await TestBed.configureTestingModule({
             imports: [GeneralSettingsComponent, ReactiveFormsModule],
             providers: [
                 { provide: ConfigManagerService, useValue: mockConfigManagerService },
                 { provide: SwUpdate, useValue: mockSwUpdate },
                 { provide: MatDialog, useValue: mockMatDialog },
+                { provide: FirmwareUpdateCheckerService, useValue: mockFirmwareUpdateCheckerService },
                 provideZonelessChangeDetection(),
             ],
         }).compileComponents();
 
         fixture = TestBed.createComponent(GeneralSettingsComponent);
         component = fixture.componentInstance;
+        loader = TestbedHarnessEnvironment.loader(fixture);
 
         fixture.componentRef.setInput("rowerSettings", mockRowerSettings);
         fixture.componentRef.setInput("deviceInfo", mockDeviceInfo);
         fixture.componentRef.setInput("isConnected", true);
     });
 
-    it("should create component", (): void => {
-        expect(component).toBeTruthy();
+    describe("as part of component creation", (): void => {
+        it("should create component", (): void => {
+            expect(component).toBeTruthy();
+        });
+
+        it("should initialize isGuiUpdateInProgress signal to false", (): void => {
+            expect(component.isGuiUpdateInProgress()).toBe(false);
+        });
+
+        it("should have valid form by default", (): void => {
+            expect(component.settingsForm.valid).toBe(true);
+        });
+
+        it("should expose enum types for template use", (): void => {
+            expect(component.BleServiceFlag).toBe(BleServiceFlag);
+            expect(component.LogLevel).toBe(LogLevel);
+        });
+
+        it("should have readonly compile date info", (): void => {
+            expect(component.compileDate).toBeDefined();
+            expect(component.compileDate instanceof Date).toBe(true);
+        });
+
+        it("should have access to firmware update checker service", (): void => {
+            expect(component.firmwareUpdateCheckerService).toBeDefined();
+            expect(component.firmwareUpdateCheckerService).toBe(mockFirmwareUpdateCheckerService);
+        });
     });
 
-    it("should initialize form with correct default values from rowerSettings", (): void => {
-        fixture.detectChanges();
+    describe("as part of template rendering", (): void => {
+        it("should display the compile date in the template", (): void => {
+            fixture.detectChanges();
+            const nativeElement = fixture.debugElement.nativeElement;
+            const spans = nativeElement.querySelectorAll("span") as NodeListOf<HTMLSpanElement>;
+            const guiVersionSpan = Array.from(spans).find(
+                (el: HTMLSpanElement): boolean => !!el.textContent && el.textContent.includes("GUI Version:"),
+            );
+            expect(guiVersionSpan).toBeDefined();
 
-        expect(component.settingsForm.value.bleMode).toBe(BleServiceFlag.CpsService);
-        expect(component.settingsForm.value.logLevel).toBe(LogLevel.Info);
-        expect(component.settingsForm.value.deltaTimeLogging).toBe(false);
-        expect(component.settingsForm.value.logToSdCard).toBe(true);
-        expect(component.settingsForm.value.heartRateMonitor).toBe("off");
+            const compileDate = component.compileDate;
+            const pad2 = (n: number): string => n.toString().padStart(2, "0");
+            const expectedDate = compileDate
+                ? `${pad2(compileDate.getFullYear() % 100)}${pad2(compileDate.getMonth() + 1)}${pad2(compileDate.getDate())}${pad2(compileDate.getHours())}${pad2(compileDate.getMinutes())}${pad2(compileDate.getSeconds())}`
+                : "";
+
+            expect(guiVersionSpan && guiVersionSpan.textContent).toContain(expectedDate);
+        });
+
+        describe("GUI software update button", (): void => {
+            let guiUpdateDiv: HTMLDivElement;
+
+            beforeEach((): void => {
+                fixture.detectChanges();
+
+                guiUpdateDiv = Array.from<HTMLSpanElement>(
+                    fixture.nativeElement.querySelectorAll("div[versionInfo] > span"),
+                ).filter((element: HTMLSpanElement): boolean =>
+                    element.textContent.includes("GUI Version:"),
+                )[0].parentElement as HTMLDivElement;
+                guiUpdateDiv.setAttribute("data-test-gui-update", "1");
+            });
+
+            describe("when not checking for updates", (): void => {
+                it("should display correct tooltip text", async (): Promise<void> => {
+                    component.isGuiUpdateInProgress.set(false);
+                    const tooltip = await loader.getHarness(
+                        MatTooltipHarness.with({
+                            ancestor: "[data-test-gui-update]",
+                        }),
+                    );
+
+                    await tooltip.show();
+
+                    expect(await tooltip.getTooltipText()).toBe("Check for update");
+                });
+
+                it("should not add rotating class to icon", (): void => {
+                    component.isGuiUpdateInProgress.set(false);
+                    fixture.detectChanges();
+
+                    const refreshIcon = fixture.nativeElement.querySelector(
+                        "div[versionInfo][data-test-gui-update] mat-icon",
+                    );
+                    expect(refreshIcon).toBeTruthy();
+                    expect(refreshIcon.classList.contains("rotating")).toBe(false);
+                });
+            });
+
+            describe("when update check is in progress", (): void => {
+                it("should display correct tooltip text", async (): Promise<void> => {
+                    component.isGuiUpdateInProgress.set(true);
+                    fixture.detectChanges();
+
+                    const tooltip = await loader.getHarness(
+                        MatTooltipHarness.with({
+                            ancestor: "[data-test-gui-update]",
+                        }),
+                    );
+
+                    await tooltip.show();
+
+                    expect(await tooltip.getTooltipText()).toBe("Checking for update");
+                });
+
+                it("should add rotating class to icon", (): void => {
+                    component.isGuiUpdateInProgress.set(true);
+                    fixture.detectChanges();
+
+                    const refreshIcon = fixture.nativeElement.querySelector(
+                        "div[versionInfo][data-test-gui-update] mat-icon",
+                    );
+                    expect(refreshIcon).toBeTruthy();
+                    expect(refreshIcon.classList.contains("rotating")).toBe(true);
+                });
+            });
+
+            it("should call checkForUpdates when GUI update button is clicked", (): void => {
+                spyOn(component, "checkForUpdates");
+                fixture.detectChanges();
+
+                const guiUpdateButton = fixture.nativeElement.querySelector(
+                    "div[versionInfo][data-test-gui-update] button",
+                );
+                guiUpdateButton.click();
+
+                expect(component.checkForUpdates).toHaveBeenCalled();
+            });
+
+            it("should reactively update tooltip text when isGuiUpdateInProgress signal changes", async (): Promise<void> => {
+                component.isGuiUpdateInProgress.set(false);
+                fixture.detectChanges();
+
+                const tooltip = await loader.getHarness(
+                    MatTooltipHarness.with({
+                        ancestor: "[data-test-gui-update]",
+                    }),
+                );
+
+                await tooltip.show();
+
+                expect(await tooltip.getTooltipText()).toBe("Check for update");
+
+                component.isGuiUpdateInProgress.set(true);
+                fixture.detectChanges();
+
+                expect(await tooltip.getTooltipText()).toBe("Checking for update");
+
+                component.isGuiUpdateInProgress.set(false);
+                fixture.detectChanges();
+
+                expect(await tooltip.getTooltipText()).toBe("Check for update");
+            });
+
+            it("should reactively update icon rotation when isGuiUpdateInProgress signal changes", (): void => {
+                component.isGuiUpdateInProgress.set(false);
+                fixture.detectChanges();
+
+                let refreshIcon = fixture.nativeElement.querySelector(
+                    "div[versionInfo][data-test-gui-update] mat-icon",
+                );
+                expect(refreshIcon.classList.contains("rotating"))
+                    .withContext("progress is false")
+                    .toBe(false);
+
+                component.isGuiUpdateInProgress.set(true);
+                fixture.detectChanges();
+
+                refreshIcon = fixture.nativeElement.querySelector(
+                    "div[versionInfo][data-test-gui-update] mat-icon",
+                );
+                expect(refreshIcon.classList.contains("rotating")).withContext("progress is true").toBe(true);
+
+                component.isGuiUpdateInProgress.set(false);
+                fixture.detectChanges();
+
+                refreshIcon = fixture.nativeElement.querySelector(
+                    "div[versionInfo][data-test-gui-update] mat-icon",
+                );
+                expect(refreshIcon.classList.contains("rotating"))
+                    .withContext("progress is false again")
+                    .toBe(false);
+            });
+        });
+
+        describe("firmware upload button", (): void => {
+            it("should be enabled when connected", (): void => {
+                fixture.componentRef.setInput("isConnected", true);
+                fixture.detectChanges();
+
+                const btns = Array.from(
+                    fixture.debugElement.nativeElement.querySelectorAll(
+                        "button.small-icon-button[mat-icon-button]",
+                    ),
+                ) as Array<HTMLElement>;
+                const uploadBtn = btns.find(
+                    (btn: HTMLElement): boolean =>
+                        btn.querySelector("mat-icon")?.textContent?.trim() === "upload_file",
+                );
+
+                expect(uploadBtn).toBeDefined();
+                if (uploadBtn) {
+                    expect((uploadBtn as HTMLButtonElement).disabled).toBe(false);
+                }
+            });
+
+            it("should be disabled when not connected", (): void => {
+                fixture.componentRef.setInput("isConnected", false);
+                fixture.detectChanges();
+
+                const btns = Array.from(
+                    fixture.debugElement.nativeElement.querySelectorAll(
+                        "button.small-icon-button[mat-icon-button]",
+                    ),
+                ) as Array<HTMLElement>;
+                const uploadBtn = btns.find(
+                    (btn: HTMLElement): boolean =>
+                        btn.querySelector("mat-icon")?.textContent?.trim() === "upload_file",
+                );
+
+                expect(uploadBtn).toBeDefined();
+                if (uploadBtn) {
+                    expect((uploadBtn as HTMLButtonElement).disabled).toBe(true);
+                }
+            });
+        });
+
+        describe("firmware update button", (): void => {
+            it("should call checkForFirmwareUpdate when clicked", (): void => {
+                mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(false);
+                fixture.componentRef.setInput("isConnected", true);
+                fixture.detectChanges();
+
+                const refreshButton = fixture.nativeElement.querySelectorAll("button.small-icon-button")[1];
+                refreshButton.click();
+
+                expect(mockFirmwareUpdateCheckerService.checkForFirmwareUpdate).toHaveBeenCalled();
+            });
+
+            describe("should show rotating icon", (): void => {
+                it("when update check is in progress at initial open", (): void => {
+                    mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(undefined);
+
+                    fixture.componentRef.setInput("isConnected", true);
+                    fixture.detectChanges();
+
+                    const refreshIcon = fixture.nativeElement.querySelector('mat-icon[class*="rotating"]');
+                    expect(refreshIcon).toBeTruthy();
+                });
+
+                it("when update firmware button is clicked", (): void => {
+                    mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(false);
+                    mockFirmwareUpdateCheckerService.checkForFirmwareUpdate.and.callFake(
+                        (): Promise<void> => {
+                            mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(undefined);
+
+                            return Promise.resolve();
+                        },
+                    );
+
+                    fixture.componentRef.setInput("isConnected", true);
+                    fixture.detectChanges();
+                    const refreshButton =
+                        fixture.nativeElement.querySelectorAll("button.small-icon-button")[1];
+                    refreshButton.click();
+
+                    fixture.detectChanges();
+
+                    const refreshIcon = fixture.nativeElement.querySelector('mat-icon[class*="rotating"]');
+                    expect(refreshIcon).toBeTruthy();
+                });
+            });
+
+            it("should not show rotating icon when not checking for updates", (): void => {
+                mockFirmwareUpdateCheckerService.isUpdateAvailable.and.returnValue(false);
+
+                fixture.componentRef.setInput("isConnected", true);
+                fixture.detectChanges();
+
+                const refreshIcon = fixture.nativeElement.querySelector("mat-icon.rotating");
+                expect(refreshIcon).toBeFalsy();
+            });
+
+            it("should enable firmware update button when connected", (): void => {
+                fixture.componentRef.setInput("isConnected", true);
+                fixture.detectChanges();
+
+                const firmwareUpdateButton: Array<HTMLButtonElement | null> =
+                    fixture.nativeElement.querySelectorAll(".erg-info button");
+
+                expect(firmwareUpdateButton.length).toBe(2);
+            });
+
+            it("should hide firmware update button when not connected", (): void => {
+                fixture.componentRef.setInput("isConnected", false);
+                fixture.detectChanges();
+
+                const firmwareUpdateButton: Array<HTMLButtonElement | null> =
+                    fixture.nativeElement.querySelectorAll(".erg-info button");
+
+                expect(firmwareUpdateButton.length).toBe(1);
+            });
+        });
     });
 
-    it("should have valid form by default", (): void => {
-        expect(component.settingsForm.valid).toBe(true);
+    describe("as part of form initialization", (): void => {
+        it("should initialize form with correct default values from rowerSettings", (): void => {
+            fixture.detectChanges();
+
+            expect(component.settingsForm.value.bleMode).toBe(BleServiceFlag.CpsService);
+            expect(component.settingsForm.value.logLevel).toBe(LogLevel.Info);
+            expect(component.settingsForm.value.deltaTimeLogging).toBe(false);
+            expect(component.settingsForm.value.logToSdCard).toBe(true);
+            expect(component.settingsForm.value.heartRateMonitor).toBe("off");
+        });
+
+        it("should emit form validity on initialization", (): void => {
+            spyOn(component.isFormValidChange, "emit");
+
+            fixture.detectChanges();
+
+            expect(component.isFormValidChange.emit).toHaveBeenCalledWith(true);
+        });
+
+        it("should retrieve heart rate monitor setting from ConfigManager", (): void => {
+            mockConfigManagerService.getItem.and.returnValue("ble");
+
+            component.ngOnInit();
+
+            expect(mockConfigManagerService.getItem).toHaveBeenCalledWith("heartRateMonitor");
+            expect(component.settingsForm.value.heartRateMonitor).toBe("ble");
+        });
     });
 
-    it("should emit form validity on initialization", (): void => {
-        spyOn(component.isFormValidChange, "emit");
+    describe("as part of form validation", (): void => {
+        it("should validate bleMode field", (): void => {
+            const bleModeControl = component.settingsForm.controls.bleMode;
 
-        fixture.detectChanges();
+            bleModeControl.setValue(BleServiceFlag.CpsService);
+            fixture.detectChanges();
 
-        expect(component.isFormValidChange.emit).toHaveBeenCalledWith(true);
+            expect(bleModeControl.valid).toBe(true);
+
+            bleModeControl.setValue(BleServiceFlag.FtmsService);
+            fixture.detectChanges();
+
+            expect(bleModeControl.valid).toBe(true);
+        });
+
+        it("should validate logLevel field", (): void => {
+            const logLevelControl = component.settingsForm.controls.logLevel;
+
+            logLevelControl.setValue(LogLevel.Silent);
+            fixture.detectChanges();
+
+            expect(logLevelControl.valid).toBe(true);
+
+            logLevelControl.setValue(LogLevel.Verbose);
+            fixture.detectChanges();
+
+            expect(logLevelControl.valid).toBe(true);
+        });
+
+        it("should validate heartRateMonitor field", (): void => {
+            const heartRateControl = component.settingsForm.controls.heartRateMonitor;
+
+            heartRateControl.setValue("off");
+            expect(heartRateControl.valid).toBe(true);
+
+            heartRateControl.setValue("ble");
+            expect(heartRateControl.valid).toBe(true);
+
+            heartRateControl.setValue("ant");
+            expect(heartRateControl.valid).toBe(true);
+        });
+
+        it("should update form validity when form value changes", (): void => {
+            fixture.detectChanges();
+            spyOn(component.isFormValidChange, "emit");
+
+            component.settingsForm.controls.bleMode.setValue(BleServiceFlag.FtmsService);
+            fixture.detectChanges();
+
+            expect(component.isFormValidChange.emit).toHaveBeenCalledWith(true);
+        });
+
+        it("should emit false when form becomes invalid", (): void => {
+            fixture.detectChanges();
+            spyOn(component.isFormValidChange, "emit");
+            component.settingsForm.controls.logLevel.setValue(10 as unknown as LogLevel);
+
+            fixture.detectChanges();
+
+            expect(component.isFormValidChange.emit).toHaveBeenCalledWith(false);
+        });
     });
 
-    it("should display the compile date in the template", (): void => {
-        fixture.detectChanges();
-        const nativeElement = fixture.debugElement.nativeElement;
-        const spans = nativeElement.querySelectorAll("span") as NodeListOf<HTMLSpanElement>;
-        const guiVersionSpan = Array.from(spans).find(
-            (el: HTMLSpanElement): boolean => !!el.textContent && el.textContent.includes("GUI Version:"),
-        );
-        expect(guiVersionSpan).toBeDefined();
+    describe("as part of form state management", (): void => {
+        it("should handle form value changes correctly", (): void => {
+            const newSettings = {
+                ...mockRowerSettings,
+                generalSettings: {
+                    ...mockRowerSettings.generalSettings,
+                    bleServiceFlag: BleServiceFlag.FtmsService,
+                    logLevel: LogLevel.Verbose,
+                },
+            };
 
-        const compileDate = component.compileDate;
-        const pad2 = (n: number): string => n.toString().padStart(2, "0");
-        const expectedDate = compileDate
-            ? `${pad2(compileDate.getFullYear() % 100)}${pad2(compileDate.getMonth() + 1)}${pad2(compileDate.getDate())}${pad2(compileDate.getHours())}${pad2(compileDate.getMinutes())}${pad2(compileDate.getSeconds())}`
-            : "";
+            fixture.componentRef.setInput("rowerSettings", newSettings);
 
-        expect(guiVersionSpan && guiVersionSpan.textContent).toContain(expectedDate);
-    });
+            fixture.detectChanges();
 
-    describe("Form Enable/Disable Logic", (): void => {
+            expect(component.settingsForm.value.bleMode).toBe(BleServiceFlag.FtmsService);
+            expect(component.settingsForm.value.logLevel).toBe(LogLevel.Verbose);
+        });
+
         it("before ngOnInit should have all controls disabled apart from heartRateMonitor", (): void => {
             const controls = component.settingsForm.controls;
             const keys: Array<keyof typeof controls> = [
@@ -175,23 +560,6 @@ describe("GeneralSettingsComponent", (): void => {
                     fixture.detectChanges();
                 });
 
-                it("should enable the firmware upload button", (): void => {
-                    const btns = Array.from(
-                        fixture.debugElement.nativeElement.querySelectorAll(
-                            "button.small-icon-button[mat-icon-button]",
-                        ),
-                    ) as Array<HTMLElement>;
-                    const uploadBtn = btns.find(
-                        (btn: HTMLElement): boolean =>
-                            btn.querySelector("mat-icon")?.textContent?.trim() === "upload_file",
-                    );
-
-                    expect(uploadBtn).toBeDefined();
-                    if (uploadBtn) {
-                        expect((uploadBtn as HTMLButtonElement).disabled).toBe(false);
-                    }
-                });
-
                 it("should enable controls with defined values", (): void => {
                     expect(component.settingsForm.controls.logToSdCard.enabled).toBe(true);
                     expect(component.settingsForm.controls.deltaTimeLogging.enabled).toBe(true);
@@ -222,23 +590,6 @@ describe("GeneralSettingsComponent", (): void => {
                     fixture.detectChanges();
                 });
 
-                it("should disable the firmware upload button", (): void => {
-                    const btns = Array.from(
-                        fixture.debugElement.nativeElement.querySelectorAll(
-                            "button.small-icon-button[mat-icon-button]",
-                        ),
-                    ) as Array<HTMLElement>;
-                    const uploadBtn = btns.find(
-                        (btn: HTMLElement): boolean =>
-                            btn.querySelector("mat-icon")?.textContent?.trim() === "upload_file",
-                    );
-
-                    expect(uploadBtn).toBeDefined();
-                    if (uploadBtn) {
-                        expect((uploadBtn as HTMLButtonElement).disabled).toBe(true);
-                    }
-                });
-
                 it("should disable all controls except heartRateMonitor", (): void => {
                     const controls = component.settingsForm.controls;
                     const keys: Array<keyof typeof controls> = [
@@ -262,188 +613,131 @@ describe("GeneralSettingsComponent", (): void => {
         });
     });
 
-    describe("Form Validators & Validation should validate ", (): void => {
-        it("bleMode field", (): void => {
-            const bleModeControl = component.settingsForm.controls.bleMode;
-
-            bleModeControl.setValue(BleServiceFlag.CpsService);
-            fixture.detectChanges();
-
-            expect(bleModeControl.valid).toBe(true);
-
-            bleModeControl.setValue(BleServiceFlag.FtmsService);
-            fixture.detectChanges();
-
-            expect(bleModeControl.valid).toBe(true);
+    describe("checkForUpdates method", (): void => {
+        it("should exist and be callable", async (): Promise<void> => {
+            expect(component.checkForUpdates).toBeDefined();
+            await expectAsync(component.checkForUpdates()).not.toBeRejected();
         });
 
-        it("logLevel field", (): void => {
-            const logLevelControl = component.settingsForm.controls.logLevel;
+        it("should not call swUpdate.checkForUpdate in development mode", async (): Promise<void> => {
+            (globalThis as unknown as { ngDevMode: boolean }).ngDevMode = true;
 
-            logLevelControl.setValue(LogLevel.Silent);
-            fixture.detectChanges();
+            await component.checkForUpdates();
 
-            expect(logLevelControl.valid).toBe(true);
-
-            logLevelControl.setValue(LogLevel.Verbose);
-            fixture.detectChanges();
-
-            expect(logLevelControl.valid).toBe(true);
+            expect(mockSwUpdate.checkForUpdate).not.toHaveBeenCalled();
+            expect(component.isGuiUpdateInProgress()).toBe(false);
         });
 
-        it("heartRateMonitor field", (): void => {
-            const heartRateControl = component.settingsForm.controls.heartRateMonitor;
-
-            heartRateControl.setValue("off");
-            expect(heartRateControl.valid).toBe(true);
-
-            heartRateControl.setValue("ble");
-            expect(heartRateControl.valid).toBe(true);
-
-            heartRateControl.setValue("ant");
-            expect(heartRateControl.valid).toBe(true);
-        });
-    });
-
-    describe("Update Management (checkForUpdates/otaUpdate)", (): void => {
-        describe("checkForUpdates", (): void => {
-            it("should exist and be callable", (): void => {
-                expect(component.checkForUpdates).toBeDefined();
-                expect((): void => component.checkForUpdates()).not.toThrow();
-            });
-        });
-
-        describe("otaUpdate method", (): void => {
-            const createInputWithFiles = (files: Array<File> | null): HTMLInputElement => {
-                const input = document.createElement("input");
-                Object.defineProperty(input, "files", {
-                    value: files
-                        ? {
-                              0: files[0],
-                              length: files.length,
-                              item: (i: number): File => files[i],
-                              [Symbol.iterator]: function* (): IterableIterator<File> {
-                                  for (let i = 0; i < files.length; i++) yield files[i];
-                              },
-                          }
-                        : null,
-                    writable: true,
-                });
-
-                return input;
-            };
-
-            it("should open OTA dialog when file is provided", async (): Promise<void> => {
-                const mockFile = new File(["test content"], "firmware.bin", {
-                    type: "application/octet-stream",
-                });
-                const input = createInputWithFiles([mockFile]);
-                const mockEvent = { currentTarget: input } as unknown as Event;
-
-                await component.otaUpdate(mockEvent);
-
-                expect(mockMatDialog.open).toHaveBeenCalledWith(OtaDialogComponent, {
-                    autoFocus: false,
-                    disableClose: true,
-                    data: {
-                        firmwareSize: mockFile.size / 1000,
-                        file: mockFile,
-                    },
-                });
+        describe("when in production mode", (): void => {
+            beforeEach((): void => {
+                (globalThis as unknown as { ngDevMode: boolean }).ngDevMode = false;
             });
 
-            it("should return early when no files provided", async (): Promise<void> => {
-                const input = createInputWithFiles(null);
-                const mockEvent = { currentTarget: input } as unknown as Event;
+            it("should set isGuiUpdateInProgress to true before checking for updates", async (): Promise<void> => {
+                expect(component.isGuiUpdateInProgress()).toBe(false);
 
-                await component.otaUpdate(mockEvent);
+                const checkPromise = component.checkForUpdates();
+                expect(component.isGuiUpdateInProgress()).toBe(true);
 
-                expect(mockMatDialog.open).not.toHaveBeenCalled();
+                await checkPromise;
+                expect(component.isGuiUpdateInProgress()).toBe(false);
+                expect(mockSwUpdate.checkForUpdate).toHaveBeenCalled();
             });
 
-            it("should handle large file sizes correctly", async (): Promise<void> => {
-                const largeFile = new File(["x".repeat(2000000)], "large-firmware.bin");
-                const input = createInputWithFiles([largeFile]);
-                const mockEvent = { currentTarget: input } as unknown as Event;
+            it("should set isGuiUpdateInProgress to false after update check completes", async (): Promise<void> => {
+                mockSwUpdate.checkForUpdate.and.resolveTo(true);
 
-                await component.otaUpdate(mockEvent);
+                await component.checkForUpdates();
 
-                expect(mockMatDialog.open).toHaveBeenCalledWith(OtaDialogComponent, {
-                    autoFocus: false,
-                    disableClose: true,
-                    data: {
-                        firmwareSize: largeFile.size / 1000,
-                        file: largeFile,
-                    },
-                });
+                expect(component.isGuiUpdateInProgress()).toBe(false);
+                expect(mockSwUpdate.checkForUpdate).toHaveBeenCalled();
+            });
+
+            it("should return early if update is already in progress", async (): Promise<void> => {
+                component.isGuiUpdateInProgress.set(true);
+
+                await component.checkForUpdates();
+
+                expect(mockSwUpdate.checkForUpdate).not.toHaveBeenCalled();
+                expect(component.isGuiUpdateInProgress()).toBe(true);
+            });
+
+            it("should reset isGuiUpdateInProgress even if update check fails", async (): Promise<void> => {
+                mockSwUpdate.checkForUpdate.and.rejectWith(new Error("Update check failed"));
+
+                await expectAsync(component.checkForUpdates()).toBeRejected();
+                expect(component.isGuiUpdateInProgress()).toBe(false);
             });
         });
     });
 
-    describe("Utility Methods", (): void => {
-        it("should have readonly compile date info", (): void => {
-            expect(component.compileDate).toBeDefined();
-            expect(component.compileDate instanceof Date).toBe(true);
-        });
+    describe("otaUpdate method", (): void => {
+        const createInputWithFiles = (files: Array<File> | null): HTMLInputElement => {
+            const input = document.createElement("input");
+            Object.defineProperty(input, "files", {
+                value: files
+                    ? {
+                          0: files[0],
+                          length: files.length,
+                          item: (i: number): File => files[i],
+                          [Symbol.iterator]: function* (): IterableIterator<File> {
+                              for (let i = 0; i < files.length; i++) yield files[i];
+                          },
+                      }
+                    : null,
+                writable: true,
+            });
 
-        it("should expose enum types for template use", (): void => {
-            expect(component.BleServiceFlag).toBe(BleServiceFlag);
-            expect(component.LogLevel).toBe(LogLevel);
-        });
-    });
+            return input;
+        };
 
-    describe("Form Value Integration", (): void => {
-        it("should update form validity when form value changes", (): void => {
-            fixture.detectChanges();
-            spyOn(component.isFormValidChange, "emit");
+        it("should open OTA dialog when file is provided", async (): Promise<void> => {
+            const mockFile = new File(["test content"], "firmware.bin", {
+                type: "application/octet-stream",
+            });
+            const input = createInputWithFiles([mockFile]);
+            const mockEvent = { currentTarget: input } as unknown as Event;
 
-            component.settingsForm.controls.bleMode.setValue(BleServiceFlag.FtmsService);
-            fixture.detectChanges();
+            await component.otaUpdate(mockEvent);
 
-            expect(component.isFormValidChange.emit).toHaveBeenCalledWith(true);
-        });
-
-        it("should emit false when form becomes invalid", (): void => {
-            fixture.detectChanges();
-            spyOn(component.isFormValidChange, "emit");
-            component.settingsForm.controls.logLevel.setValue(10 as unknown as LogLevel);
-
-            fixture.detectChanges();
-
-            expect(component.isFormValidChange.emit).toHaveBeenCalledWith(false);
-        });
-
-        it("should handle form value changes correctly", (): void => {
-            const newSettings = {
-                ...mockRowerSettings,
-                generalSettings: {
-                    ...mockRowerSettings.generalSettings,
-                    bleServiceFlag: BleServiceFlag.FtmsService,
-                    logLevel: LogLevel.Verbose,
+            expect(mockMatDialog.open).toHaveBeenCalledWith(OtaDialogComponent, {
+                autoFocus: false,
+                disableClose: true,
+                data: {
+                    firmwareSize: mockFile.size / 1000,
+                    file: mockFile,
                 },
-            };
+            });
+        });
 
-            fixture.componentRef.setInput("rowerSettings", newSettings);
+        it("should return early when no files provided", async (): Promise<void> => {
+            const input = createInputWithFiles(null);
+            const mockEvent = { currentTarget: input } as unknown as Event;
 
-            fixture.detectChanges();
+            await component.otaUpdate(mockEvent);
 
-            expect(component.settingsForm.value.bleMode).toBe(BleServiceFlag.FtmsService);
-            expect(component.settingsForm.value.logLevel).toBe(LogLevel.Verbose);
+            expect(mockMatDialog.open).not.toHaveBeenCalled();
+        });
+
+        it("should handle large file sizes correctly", async (): Promise<void> => {
+            const largeFile = new File(["x".repeat(2000000)], "large-firmware.bin");
+            const input = createInputWithFiles([largeFile]);
+            const mockEvent = { currentTarget: input } as unknown as Event;
+
+            await component.otaUpdate(mockEvent);
+
+            expect(mockMatDialog.open).toHaveBeenCalledWith(OtaDialogComponent, {
+                autoFocus: false,
+                disableClose: true,
+                data: {
+                    firmwareSize: largeFile.size / 1000,
+                    file: largeFile,
+                },
+            });
         });
     });
 
-    describe("ConfigManager Integration", (): void => {
-        it("should retrieve heart rate monitor setting from ConfigManager", (): void => {
-            mockConfigManagerService.getItem.and.returnValue("ble");
-
-            component.ngOnInit();
-
-            expect(mockConfigManagerService.getItem).toHaveBeenCalledWith("heartRateMonitor");
-            expect(component.settingsForm.value.heartRateMonitor).toBe("ble");
-        });
-    });
-
-    describe("Edge Cases & Robustness", (): void => {
+    describe("as part of edge cases & robustness handling", (): void => {
         it("should handle otaUpdate with invalid input element", async (): Promise<void> => {
             const mockEvent = {
                 currentTarget: null,

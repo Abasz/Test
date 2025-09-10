@@ -4,8 +4,9 @@ import { MatIconButton } from "@angular/material/button";
 import { MatDialog } from "@angular/material/dialog";
 import { MatIcon } from "@angular/material/icon";
 import { MatTooltip } from "@angular/material/tooltip";
-import { filter, firstValueFrom } from "rxjs";
+import { filter, firstValueFrom, timeout } from "rxjs";
 
+import { IDeviceInformation } from "../../common/ble.interfaces";
 import { IErgConnectionStatus, IRowerSettings } from "../../common/common.interfaces";
 import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 import { ErgGenericDataService } from "../../common/services/ergometer/erg-generic-data.service";
@@ -44,7 +45,9 @@ export class OpenSettingsButtonComponent {
         if (this.ergConnectionStatus().status === "connecting") {
             this.utils.mainSpinner().open();
             try {
-                await this.waitForConnectionProcessComplete();
+                await this.handleConnectingFlow();
+            } catch {
+                // ignore any error, we just open the dialog with whatever data we have
             } finally {
                 this.utils.mainSpinner().close();
             }
@@ -59,8 +62,18 @@ export class OpenSettingsButtonComponent {
         });
     }
 
-    private async waitForConnectionProcessComplete(): Promise<void> {
-        await firstValueFrom(
+    private async handleConnectingFlow(): Promise<void> {
+        const finalStatus = await this.waitForConnectionProcessComplete();
+
+        if (finalStatus.status !== "connected") {
+            return;
+        }
+
+        await this.waitForDeviceInfoReady();
+    }
+
+    private waitForConnectionProcessComplete(): Promise<IErgConnectionStatus> {
+        return firstValueFrom(
             this.ergConnectionService
                 .connectionStatus$()
                 .pipe(
@@ -69,6 +82,15 @@ export class OpenSettingsButtonComponent {
                             connectionStatus.status !== "connecting",
                     ),
                 ),
+        );
+    }
+
+    private waitForDeviceInfoReady(): Promise<IDeviceInformation> {
+        return firstValueFrom(
+            this.ergGenericDataService.deviceInfo$.pipe(
+                filter((deviceInfo: IDeviceInformation): boolean => Object.keys(deviceInfo).length > 0),
+                timeout({ first: 5000 }),
+            ),
         );
     }
 }

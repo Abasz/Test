@@ -12,6 +12,7 @@ import {
     Observable,
     of,
     retry,
+    shareReplay,
     switchMap,
     timer,
 } from "rxjs";
@@ -37,22 +38,21 @@ import { readDeviceInfo } from "./erg.utilities";
     providedIn: "root",
 })
 export class ErgGenericDataService {
-    readonly deviceInfo: Signal<IDeviceInformation> = toSignal(
-        this.ergConnectionService.connectionStatus$().pipe(
-            map(
-                (ergConnectionStatus: IErgConnectionStatus): boolean =>
-                    ergConnectionStatus.status === "connected",
-            ),
-            distinctUntilChanged(),
-            switchMap(
-                (isConnected: boolean): Observable<IDeviceInformation> =>
-                    isConnected ? from(this.readDeviceInfo()) : of({}),
-            ),
+    readonly deviceInfo$: Observable<IDeviceInformation> = this.ergConnectionService.connectionStatus$().pipe(
+        map(
+            (ergConnectionStatus: IErgConnectionStatus): boolean =>
+                ergConnectionStatus.status === "connected",
         ),
-        {
-            initialValue: {} as IDeviceInformation,
-        },
+        distinctUntilChanged(),
+        switchMap(
+            (isConnected: boolean): Observable<IDeviceInformation> =>
+                isConnected ? from(this.readDeviceInfo()) : of({}),
+        ),
+        shareReplay(1),
     );
+    readonly deviceInfo: Signal<IDeviceInformation> = toSignal(this.deviceInfo$, {
+        initialValue: {} as IDeviceInformation,
+    });
 
     constructor(
         private snackBar: MatSnackBar,

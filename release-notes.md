@@ -17,6 +17,11 @@ This release focuses on adding rower settings capabilities implemented on the mo
 - **Custom Profile Management**: Implemented custom profile support with automatic persistence to browser local storage. Custom profiles are automatically saved when users modify settings from standard configurations.
 - **Profile Auto-Update**: Integrated automated build pipeline to fetch updated profiles when new firmware releases are available from the ESPRowingMonitor repository.
 
+### Firmware Update Checks
+
+- **Automatic Firmware Detection**: The app now automatically checks for available firmware updates when a device successfully connects. The check runs after the connection flow and only runs for fully connected devices.
+- **Compatibility Handling**: Added safeguards for older devices and firmware versions that do not expose update metadata — those devices are skipped gracefully without errors.
+
 ## General Updates and Improvements
 
 ### Code Quality and Testing

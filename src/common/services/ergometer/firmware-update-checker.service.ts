@@ -1,5 +1,5 @@
 import { HttpClient } from "@angular/common/http";
-import { Injectable } from "@angular/core";
+import { Injectable, signal, Signal, WritableSignal } from "@angular/core";
 import { MatSnackBar } from "@angular/material/snack-bar";
 import { firstValueFrom } from "rxjs";
 
@@ -16,15 +16,21 @@ interface GitHubRelease {
     providedIn: "root",
 })
 export class FirmwareUpdateCheckerService {
+    readonly isUpdateAvailable: Signal<undefined | boolean>;
+
     private readonly GITHUB_API_URL: string =
         "https://api.github.com/repos/Abasz/ESPRowingMonitor/releases/latest";
     private updateIsInProgress: boolean = false;
+
+    private _isUpdateAvailable: WritableSignal<undefined | boolean> = signal(undefined);
 
     constructor(
         private http: HttpClient,
         private snackBar: MatSnackBar,
         private ergGenericDataService: ErgGenericDataService,
-    ) {}
+    ) {
+        this.isUpdateAvailable = this._isUpdateAvailable.asReadonly();
+    }
 
     /**
      * Checks for firmware updates by comparing the device firmware version
@@ -37,10 +43,13 @@ export class FirmwareUpdateCheckerService {
             }
 
             this.updateIsInProgress = true;
+            this._isUpdateAvailable.set(undefined);
 
             const firmwareNumber = this.ergGenericDataService.deviceInfo().firmwareNumber;
 
             if (!firmwareNumber) {
+                this.updateIsInProgress = false;
+                this._isUpdateAvailable.set(false);
                 console.warn("Could not retrieve device firmware version");
 
                 return;
@@ -64,7 +73,9 @@ export class FirmwareUpdateCheckerService {
                 firmwareDate.getDate(),
             );
 
-            if (releaseDateOnly > firmwareDateOnly) {
+            this._isUpdateAvailable.set(releaseDateOnly > firmwareDateOnly);
+
+            if (this._isUpdateAvailable()) {
                 this.snackBar
                     .open(`Firmware update available: ${latestRelease.tag_name}`, "View on GitHub", {
                         duration: 30000,
@@ -75,10 +86,11 @@ export class FirmwareUpdateCheckerService {
                     });
             }
         } catch (error) {
+            this._isUpdateAvailable.set(false);
             console.warn("Failed to check for firmware updates:", error);
-        } finally {
-            this.updateIsInProgress = false;
         }
+
+        this.updateIsInProgress = false;
     }
 
     /**

@@ -9,7 +9,9 @@ import {
     OnInit,
     output,
     OutputEmitterRef,
+    signal,
     Signal,
+    WritableSignal,
 } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import {
@@ -38,6 +40,8 @@ import { ConfigManagerService } from "../../common/services/config-manager.servi
 import { EnumToArrayPipe } from "../../common/utils/enum-to-array.pipe";
 import { getValidationErrors } from "../../common/utils/utility.functions";
 import { OtaDialogComponent } from "../ota-settings-dialog/ota-dialog.component";
+
+import { FirmwareUpdateCheckerService } from "./../../common/services/ergometer/firmware-update-checker.service";
 
 type GeneralSettingsFormGroup = FormGroup<{
     bleMode: FormControl<BleServiceFlag>;
@@ -75,6 +79,7 @@ export class GeneralSettingsComponent implements OnInit {
     readonly rowerSettings: InputSignal<IRowerSettings> = input.required<IRowerSettings>();
     readonly deviceInfo: InputSignal<IDeviceInformation> = input.required<IDeviceInformation>();
     readonly isConnected: InputSignal<boolean> = input.required<boolean>();
+    readonly isGuiUpdateInProgress: WritableSignal<boolean> = signal<boolean>(false);
 
     readonly isFormValidChange: OutputEmitterRef<boolean> = output<boolean>();
 
@@ -93,6 +98,7 @@ export class GeneralSettingsComponent implements OnInit {
     >;
 
     constructor(
+        public firmwareUpdateCheckerService: FirmwareUpdateCheckerService,
         private swUpdate: SwUpdate,
         private dialog: MatDialog,
         private fb: NonNullableFormBuilder,
@@ -166,9 +172,18 @@ export class GeneralSettingsComponent implements OnInit {
         }
     }
 
-    checkForUpdates(): void {
+    async checkForUpdates(): Promise<void> {
         if (!isDevMode()) {
-            this.swUpdate.checkForUpdate();
+            if (this.isGuiUpdateInProgress()) {
+                return;
+            }
+
+            this.isGuiUpdateInProgress.set(true);
+            try {
+                await this.swUpdate.checkForUpdate();
+            } finally {
+                this.isGuiUpdateInProgress.set(false);
+            }
         }
     }
 

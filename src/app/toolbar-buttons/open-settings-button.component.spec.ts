@@ -1,7 +1,7 @@
 import { HarnessLoader } from "@angular/cdk/testing";
 import { TestbedHarnessEnvironment } from "@angular/cdk/testing/testbed";
 import { provideZonelessChangeDetection } from "@angular/core";
-import { ComponentFixture, TestBed } from "@angular/core/testing";
+import { ComponentFixture, fakeAsync, TestBed, tick } from "@angular/core/testing";
 import { MatButtonHarness } from "@angular/material/button/testing";
 import { MatDialog } from "@angular/material/dialog";
 import { MatTooltipHarness } from "@angular/material/tooltip/testing";
@@ -28,6 +28,7 @@ describe("OpenSettingsButtonComponent", (): void => {
     let mockDialog: jasmine.SpyObj<MatDialog>;
     let mockMainSpinner: jasmine.SpyObj<{ open: () => void; close: () => void }>;
     let ergConnectionStatusSubject: BehaviorSubject<IErgConnectionStatus>;
+    let deviceInfoSubject: BehaviorSubject<IDeviceInformation>;
     let rowerSettingsSignal: jasmine.Spy<() => IRowerSettings>;
     let deviceInfoSignal: jasmine.Spy<() => IDeviceInformation | undefined>;
     let isSecureContextSpy: jasmine.Spy<() => boolean>;
@@ -87,12 +88,14 @@ describe("OpenSettingsButtonComponent", (): void => {
 
     beforeEach(async (): Promise<void> => {
         ergConnectionStatusSubject = new BehaviorSubject<IErgConnectionStatus>(mockErgConnectionStatus);
+        deviceInfoSubject = new BehaviorSubject<IDeviceInformation>({});
         rowerSettingsSignal = jasmine.createSpy("rowerSettings").and.returnValue(mockRowerSettings);
         deviceInfoSignal = jasmine.createSpy("deviceInfo").and.returnValue(mockDeviceInfo);
         mockMainSpinner = jasmine.createSpyObj("mainSpinner", ["open", "close"]);
 
         mockErgGenericDataService = jasmine.createSpyObj("ErgGenericDataService", [], {
             deviceInfo: deviceInfoSignal,
+            deviceInfo$: deviceInfoSubject.asObservable(),
         });
 
         mockErgSettingsService = jasmine.createSpyObj("ErgSettingsService", [], {
@@ -270,73 +273,59 @@ describe("OpenSettingsButtonComponent", (): void => {
                     const sut = component.openSettings();
 
                     ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
+                    deviceInfoSubject.next(mockDeviceInfo);
                     await sut;
                     expect(mockUtilsService.mainSpinner).toHaveBeenCalled();
                     expect(mockMainSpinner.open).toHaveBeenCalled();
                 });
 
-                it("should wait for connection process complete", async (): Promise<void> => {
-                    const sut = component.openSettings();
+                describe("and connection becomes other than connected", (): void => {
+                    it("should close main spinner", async (): Promise<void> => {
+                        const sut = component.openSettings();
 
-                    ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
-                    await expectAsync(sut).toBeResolved();
-                });
+                        ergConnectionStatusSubject.next({ status: "disconnected", deviceName: undefined });
+                        await sut;
+                        expect(mockMainSpinner.close).toHaveBeenCalled();
+                    });
 
-                it("should close main spinner after waiting", async (): Promise<void> => {
-                    const sut = component.openSettings();
+                    it("should open settings dialog", async (): Promise<void> => {
+                        const sut = component.openSettings();
 
-                    ergConnectionStatusSubject.next({ status: "disconnected", deviceName: undefined });
-                    await sut;
-                    expect(mockMainSpinner.close).toHaveBeenCalled();
-                });
-
-                it("should open settings dialog after connection process", async (): Promise<void> => {
-                    const sut = component.openSettings();
-
-                    ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
-                    await sut;
-                    expect(mockDialog.open).toHaveBeenCalledWith(SettingsDialogComponent, {
-                        autoFocus: false,
-                        data: {
-                            rowerSettings: mockRowerSettings,
-                            ergConnectionStatus: jasmine.any(Object),
-                            deviceInfo: mockDeviceInfo,
-                        },
+                        ergConnectionStatusSubject.next({ status: "searching", deviceName: "Device" });
+                        await sut;
+                        expect(mockDialog.open).toHaveBeenCalledWith(SettingsDialogComponent, {
+                            autoFocus: false,
+                            data: {
+                                rowerSettings: mockRowerSettings,
+                                ergConnectionStatus: jasmine.any(Object),
+                                deviceInfo: mockDeviceInfo,
+                            },
+                        });
                     });
                 });
-            });
-        });
 
-        describe("when connection is in progress", (): void => {
-            it("should wait until connection becomes connected before proceeding", async (): Promise<void> => {
-                ergConnectionStatusSubject.next({ status: "connecting", deviceName: undefined });
-                fixture.detectChanges();
+                describe("and connection becomes connected should open settings dialog", (): void => {
+                    it("when device info becomes available", async (): Promise<void> => {
+                        const sut = component.openSettings();
 
-                const sut = component.openSettings();
+                        ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
 
-                ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
+                        deviceInfoSubject.next(mockDeviceInfo);
 
-                await expectAsync(sut).toBeResolved();
-            });
+                        await expectAsync(sut).toBeResolved();
+                        expect(mockDialog.open).toHaveBeenCalled();
+                    });
 
-            it("should proceed when connection becomes disconnected", async (): Promise<void> => {
-                ergConnectionStatusSubject.next({ status: "connecting", deviceName: undefined });
-                fixture.detectChanges();
+                    it("when device info timeouts", fakeAsync((): void => {
+                        const sut = component.openSettings();
 
-                const sut = component.openSettings();
-                ergConnectionStatusSubject.next({ status: "disconnected", deviceName: undefined });
+                        ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
 
-                await expectAsync(sut).toBeResolved();
-            });
-
-            it("should proceed when connection becomes connected", async (): Promise<void> => {
-                ergConnectionStatusSubject.next({ status: "connecting", deviceName: undefined });
-                fixture.detectChanges();
-
-                const sut = component.openSettings();
-                ergConnectionStatusSubject.next({ status: "connected", deviceName: "Device" });
-
-                await expectAsync(sut).toBeResolved();
+                        tick(5000);
+                        expect(async (): Promise<void> => await sut).not.toThrow();
+                        expect(mockDialog.open).toHaveBeenCalled();
+                    }));
+                });
             });
         });
 

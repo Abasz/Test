@@ -14,7 +14,7 @@
         "fetch-profiles": "npm run build:tools && node out-tsc/tools/fetch-profiles.js"
     },
     "browserslist": [
-        "defaults, iOS >= 13.2, Safari>= 13.2"
+        "defaults, iOS >= 16"
     ],
     "private": true,
     "dependencies": {

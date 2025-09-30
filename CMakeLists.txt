@@ -158,7 +158,7 @@ rowerProfile=$(awk -v targetEnvironment=\"\${targetEnvironment}\" '
     }
 ' \"${CMAKE_CURRENT_SOURCE_DIR}/platformio.ini\")
 
-echo \"\${rowerProfile:-generic}\"
+echo \"\${rowerProfile:-genericAir}\"
 "
     FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ
 )

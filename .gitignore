@@ -103,7 +103,7 @@ test/calibration/**/output/*
 
 #Rowers
 !src/profiles/dynamic.rower-profile.h
-!src/profiles/genericAir.rower-profile.h
+!src/profiles/generic.rower-profile.h
 !src/profiles/kayakFirst.rower-profile.h
 !src/profiles/kayakFirstBlue.rower-profile.h
-!src/profiles/olddanube.rower-profile.h
+!src/profiles/oldDanube.rower-profile.h

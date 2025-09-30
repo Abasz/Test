@@ -38,8 +38,7 @@ public:
     inline static const string modelNumber = TOSTRING(MODEL_NUMBER);
     // NOLINTNEXTLINE(readability-redundant-string-init)
     inline static const string serialNumber = SERIAL_NUMBER;
-    inline static const string firmwareVersion = "20230101";
-    // inline static const string firmwareVersion = string(getCompileDate().data(), getCompileDate().size());
+    inline static const string firmwareVersion = string(getCompileDate().data(), getCompileDate().size());
     inline static const string hardwareRevision = string(getHardwareRevision());
 
     // Hardware settings

@@ -1,66 +1,81 @@
-# Version 6.2.0 - GPT mini
+# Version 6.2.0
 
-This release focuses on adding rower settings capabilities implemented on the monitor (including rowing machine profile management), comprehensive test coverage, and modernization of the application architecture. The new profile management feature allow users to load standard rowing profiles and create custom configurations, along with substantial improvements to the settings dialog and overall code quality.
+This release introduces runtime-configurable settings over BLE, expands the Settings Service, adds new ergometer profiles, improves tooling and adds CI, and includes multiple fixes and refinements.
+
+The runtime-configurable settings capability (that allows dynamic configuration changes without requiring firmware recompilation) significantly enhances the flexibility and usability of the program while maintains backward compatibility for users who prefer compile-time settings. The improvements in BLE functionality and hardware support make the system more accessible and easier to configure for a wider range of users and hardware setups.
 
 ## New Features
 
-### Adding Rower Settings Management
+### Runtime Settings Framework
 
-- **Ergometer Configuration**: Added functionality to interact with the new runtime-configurable settings API that allows editing settings directly to the connected ergometer device via BLE.
-- **Redesigned Settings Dialog**: Split the settings dialog into separate "General" and "Rowing" sections for improved organization and independent editing capabilities.
-- **Settings Validation**: Added user prompts when attempting to close settings without saving changes, preventing accidental loss of configurations.
-- **Backward Compatibility**: Implemented support for devices running older firmware versions that don't support settings broadcasting.
+- **Dynamic Configuration Management**: Introduced a comprehensive runtime settings system that allows users to modify rower profile configuration parameters via BLE without requiring firmware recompilation (please see details [below](#ble-and-connectivity-enhancements)).
+- **NVS Storage Integration**: Settings are now persisted in Non-Volatile Storage (NVS) and automatically loaded on startup when runtime settings are enabled.
+- **Opt-in Architecture**: Runtime settings use a "pay for what you use" approach via compiler flags, ensuring minimal overhead when not needed.
 
-### Rowing Profile Management
+### Enhanced BLE Configuration Capabilities
 
-- **Standard Profile Support**: Added automatic fetching and parsing of standard rowing profiles from the ESPRowingMonitor repository, allowing users to select from pre-configured rowing machine profiles.
-- **Custom Profile Management**: Implemented custom profile support with automatic persistence to browser local storage. Custom profiles are automatically saved when users modify settings from standard configurations.
-- **Profile Auto-Update**: Integrated automated build pipeline to fetch updated profiles when new firmware releases are available from the ESPRowingMonitor repository.
+- **Stroke Detection Settings Control**: Added new BLE characteristic and Control Point OpCode to dynamically adjust stroke detection parameters including impulse data array length and stroke detection algorithms.
+- **Drag Factor Configuration**: Implemented BLE endpoints for runtime adjustment of drag factor calculation parameters.
+- **Sensor Signal Filter Settings**: Added capability to configure sensor signal filtering parameters through BLE.
+- **Machine Settings Management**: Exposed machine-specific settings (flywheel inertia, sprocket radius, etc.) via BLE for runtime modification.
+- **Device Restart Control**: Added Control Point OpCode to allow remote device restart via BLE.
+- **Enhanced Validation**: Added centralized validation logic including cross-validation for settings to ensure compatibility and prevent invalid configurations.
 
-### Firmware Update Checks
+### New Optional Debounce Filter
 
-- **Automatic Firmware Detection**: The app now automatically checks for available firmware updates when a device successfully connects. The check runs after the connection flow and only runs for fully connected devices.
-- **Compatibility Handling**: Added safeguards for older devices and firmware versions that do not expose update metadata — those devices are skipped gracefully without errors.
+- **Compile-time Debounce Filter**: Added an optional compile-time debounce filter (`ENABLE_DEBOUNCE_FILTER`) that can be enabled (default is off). This lightweight filter helps reduce false impulses from noisy mechanical sensors (e.g. reed switches) by rejecting impulses that are inconsistent with the previous inter-impulse interval. See `docs/settings.md` for details and recommendations.
 
-## General Updates and Improvements
+### Improved Device Identification
 
-### Code Quality and Testing
+- **Auto-Generated Serial Numbers**: Serial numbers can now automatically generated from the device MAC address when not explicitly provided.
+- **Flexible Device Naming**: Added options to include/exclude serial numbers and BLE service flags in the device name.
+- **Device Name Length Validation**: Implemented compiler checks to ensure device names don't exceed 18 characters for better compatibility with devices like Garmin watches.
+- **Hardware Revision String**: Exposed the Bluetooth Device Information "Hardware Revision String" characteristic (UUID 0x2A27). The value is derived at compile time from the selected board profile (first token of the `BOARD_PROFILE` macro) with a default of "Custom". It can be explicitly overridden using the `HARDWARE_REVISION` build define. See `docs/settings.md` for details and examples of build flags.
 
-- **Comprehensive Test Coverage**: Added extensive unit tests for multiple components and services
-- **Improved Testability**: Enhanced service architecture to improve testability, particularly for AntHeartRateService and subscription handling.
+### Experimental Hardware Support
 
-### Architecture Modernization
+- **OldDanube Kayak Ergs**: Added initial experimental support for OldDanube Kayak Ergs with 6-magnet configuration (settings subject to change as hardware development continues).
 
-- **Zoneless Change Detection**: Started migration towards zoneless change detection by removing zone.js dependencies from production code and modernizing unit test infrastructure.
-- **Component Refactoring**: Moved settings bar buttons into separate, focused components for better modularity and maintainability.
-- **Lazy Loading**: Implemented routing with lazy loading for the DashboardComponent to improve initial load performance and provide easier extensibility with new features in the future
-- **Code Organization**: Restructured dashboard-related components into organized folders in preparation for future GUI extensions.
+## Updates and Improvements
 
-### User Experience Enhancements
+### BLE and Connectivity Enhancements
 
-- **Animation Improvements**: Updated animations for Angular v20 compatibility, including fixes for reduced motion preferences and restoration of Material error animations. Transitioned from deprecated animation APIs to CSS-based animations.
-- **Error Handling**: Added comprehensive global error overlay for application startup errors, with specific guidance for iOS users where Web Bluetooth is not supported.
-- **API Availability Checks**: Improved native API availability checking with better error handling and user feedback for missing browser APIs.
-- **UI Safety**: Added safeguards against multiple setting submissions to prevent accidental double-click issues.
+- **Garmin Pairing Fix**: Resolved pairing issues with newer Garmin firmware by enabling appropriate security layers for Open/Secure Connection compatibility.
+- **Connection Tracking Management**: Improved connection tracking and management for better performance and reliability.
 
-### Framework Updates
+### Performance Optimizations
 
-- **Angular v20**: Updated to the latest Angular v20 version, including Angular CLI, compiler, and related packages with the newest ESLint configuration.
-- **Improved Responsiveness**: Added flex-layout helper classes and mixins to enhance responsive design capabilities across different screen sizes.
+- **Series Class Refactoring**: Optimized series classes for improved performance during data processing.
+- **Memory Management**: Improved memory usage patterns and reduced overhead in critical code paths.
 
-### Bug Fixes and Optimizations
+### Hardware and Board Support
 
-- **Promise Handling**: Fixed withDelay utility to correctly handle Promise rejections from passed-in promises.
-- **Heart Rate Display**: Fixed styling issues with heart rate button component when heart rate monitoring is disabled.
-- **Event Handling**: Improved event and subscription handling using RxJS operators for better performance and reliability.
-- **Settings Interface**: Refactored IRowerSettings interface to reflect the new structure separating general and rowing-specific settings.
+- **Wake-up Pin Reliability**: Fixed wake-up issues on ESP32-S3 boards by ensuring RTC pin pullup is maintained during deep sleep.
+- **Generic Board Profile**: Updated LED pin definition to use GPIO_NUM_NC for boards without built-in LEDs.
+- **Board Configuration Matrix**: Restructured platformio configuration to support a matrix of board and profile combinations.
 
-## Developer Experience
+### Development and Build System Improvements
 
-- **Enhanced Tooling**: Added unit-test instruction files for GitHub Copilot integration and updated debugger configurations for improved unit test debugging capabilities.
-- **Code Standards**: Updated ESLint rules to remove overly restrictive alphabetical ordering requirements while maintaining code quality standards.
-- **Documentation**: Improved inline documentation and code comments for better maintainability.
+- **CMake Migration**: Moved from single-header test frameworks to CMake-based compilation for faster build times.
+- **CI/CD Integration**: Added GitHub Actions workflows for automated building and testing including the automatic attaching of the precompiled downloadable firmware for different boards and rowers to the latest release including a `dynamic rower profile` with runtime-configurable settings enabled.
+- **Environment Management**: Created comprehensive build matrix supporting multiple board and profile combinations.
+- **Installation Scripts**: Added installer and auto-compiler scripts for simplified setup and configuration (works only under Linux).
 
-This release represents a significant step forward in application maturity, with comprehensive test coverage, enhanced user features, and improved architectural foundations that prepare the application for future enhancements.
+## Bug Fixes
 
-Full Changelog: [6.0.1...6.2.0](https://github.com/Abasz/ESPRowingMonitor-WebGUI/compare/6.0.1...6.2.0)
+- **Sprocket Radius Setting**: Fixed implicit conversion bug that caused incorrect float-to-int conversion in macro definitions.
+- **Drag Coefficient Calculation**: Relaxed requirements for drag factor calculation to improve initial detection and recovery from resets.
+- **Compiler Warnings**: Resolved various linting errors and compiler warnings related to SdFat, LittleFS, and macro redefinitions.
+
+## Code Refactoring and Maintenance
+
+- **Settings Model Separation**: Separated settings models into dedicated headers for improved code organization by extracting the rower profile configurations class.
+- **Callback Renaming**: Renamed callback classes to better reflect their functions (e.g., ConnectionManagerCallbacks to SubscriptionManagerCallbacks).
+- **Logging Library Update**: Switched to a fork of ArduinoLog that supports class enums to eliminate compilation warnings.
+
+## Notes
+
+- **Runtime Settings**: When runtime settings are enabled, some configuration parameters are now loaded from NVS instead of compile-time constants, which may require reconfiguration for existing setups.
+- **BLE Device Names**: Device naming conventions have changed with new options for serial number and service flag inclusion, which may affect device recognition by previously paired clients (defaults are set so previous behaviur is kept).
+
+**Full Changelog**: [6.0.1...6.2.0](https://github.com/Abasz/ESPRowingMonitor/compare/6.0.1...6.2.0)

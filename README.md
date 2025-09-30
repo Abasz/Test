@@ -1,56 +1,128 @@
-# ESP Rowing Monitor WebGUI
 
-The purpose of this project is to provide an intuitive WebGUI for [ESP Rowing Monitor](https://github.com/Abasz/ESPRowingMonitor), designed to simplify metrics tracking, settings management and firmware updates.
+# ESP32 Rowing Monitor
 
-The WebGUI may be accessed via [GitHub Pages of this Repo](https://abasz.github.io/ESPRowingMonitor-WebGUI) directly as an installable Progressive Web App (with all its features) eliminating the need of running local developer/other server or host the page on the ESP32 MCU, building the Web GUI and so on. This means that this app, after install from the browser, can be used and accessed like a native app on Windows/IOS/Android with home screen icon, updates are pushed automatically, etc. This method provides a much simpler way of distributing this app.
+The purpose of this project is to provide professional-grade rowing (and other similar ergometer) analytics to indoor rowing machines, similar to the [Open Rowing Monitor Project](https://github.com/laberning/openrowingmonitor) (ORM), but with a much more affordable ESP32 microcontroller.
 
-![ESP Rowing Monitor WebGUI](docs/imgs/ESP-Rowing-Monitor-WebGUI.jpg)
+## 📌 Table of Contents
 
-The WebGUI supports all features of ESPRM API (i.e. it is able to take full advantage of the Extended BLE Metrics API as well as supports over-the-air firmware updates).
+1. [Aim of the Project](#🎯-aim-of-the-project)
+2. [Key Features](#🚀-key-features)
+4. [Installation](#📥-installation)
+5. [Settings](#⚙️-settings)
+7. [Technical Details](#🛠️-technical-details)
+6. [Backlog](#📋-backlog)
+8. [Attribution](#🙏-attribution)
 
-This approach solves several issues that has been encounter with the distribution method (e.g. its accessed through https so secured context is not an issue). Updates to the WebGUI can this way be pushed automatically and no longer requires recompilation and uploading to the MCU, etc.
+## 🎯 Aim of the project
 
-**Note, the version served over the GitHub Pages is only compatible with version 5.2 and above of ESP Rowing Monitor. This is due to the fact that the WebGUI served via GitHub Pages do not work with the deprecated WebSocket based connection type (the issue is the lack of connection via ssl to the MCU and browser security prevents such connection, at least on chrome), i.e. it requires the new Extended BLE service introduced in version 5.2 of ESPRM. This is now default on the ESP Rowing Monitor firmware.**
+This project aims to provide the same accuracy of rowing analytics to indoor ergometers (e.g. rowing, kayak, canoe, SUP etc machines) machines as ORM. However, with a much more affordable, compact, widely available and potentially battery operated ESP32 microcontroller.
 
-For reference, the old README that related to the manual building and serving/hosting of the WebGUI have been moved [here](docs/deprecated-docs.md)
+The math and algorithm used in ESP Rowing Monitor are based on the approach developed by @JaapvanEkris that improves the stroke detection algorithm of the original ORM.
 
-## BLE Heart Rate Monitor Support
+The choice of the ESP32 over the Raspberry Pi (Rpi) due to its smaller size, its operability completely from battery, its very low cost, and easy accessibility.
 
-The WebGUI supports BLE HR monitors that can be enabled in the setting. Once that is done a heart icon will show up on the toolbar that enables connecting to the HR monitor (user needs to click and then select the device from the popup window). The implementation uses Web Bluetooth API.
+There is a lot of information available on the physics and math behind the code in the repos related to ORM. Before using this project I recommend reading the documentation of ORM (specifically the docs provided currently under the [v1beta_updates branch](https://github.com/JaapvanEkris/openrowingmonitor/tree/v1beta_updates)) as this would greatly help with setting up and tuning in the settings of ESP Rowing Monitor.
 
-The WebGUI supports auto reconnect to previously paired device (reconnects to the one that was last connected) without the need to open the dialog.
+## 🚀 Key features
 
-However currently there are several limitations:
+_Highlights:_
 
-- Theoretically any browser (with sufficient high version) should work that supports the Web Bluetooth API. However, it has only been tested in Chrome
-- For Chrome at least (but I suspect other browsers may too) require the `chrome://flags/#enable-web-bluetooth-new-permissions-backend` to be enabled for the reconnect feature to work correctly
+- Very accurate stroke detection and a wide range of rowing metrics including force curve.
+- BLE connectivity supporting multiple devices simultaneously.
+- WebGUI for intuitive setup and data visualization.
+- OTA firmware updates for seamless usage and detailed logging for replay.
 
-## ANT+ Heart Rate Monitor Support
+### Web interface
 
-The WebGUI supports ANT+ HR monitors that can be enabled in the setting. Once that is done a heart icon will show up on the toolbar that enables connecting to the HR monitor (user needs to click and then select the device from the popup window). The implementation uses Web USB API.
+An intuitive WebGUI can be accessed [here](https://abasz.github.io/ESPRowingMonitor-WebGUI/) that simplifies monitoring, configuration, and firmware updates, accessible directly through a browser. It’s an installable Progressive Web App (PWA) that works offline after installation. It connects to ESP Rowing Monitor via bluetooth taking advantage the WebBluetooth stack. For further details please read the [documentation](https://github.com/Abasz/ESPRowingMonitor-WebGUI/).
 
-However the ANT+ needs a WinUSB driver (instead of generic libusb) otherwise itt will not work. This can be installed with [Zadig](https://zadig.akeo.ie/).
+### Metrics
 
-## TCX export for Strava upload
+Currently, ESP Rowing Monitor is capable of calculating the following metrics, similar to ORM:
 
-It is possible to export logged workout data in TCX format that can be manually uploaded to Strava and other platforms.
+- _driveDuration_ and _recoveryDuration_
+- _average cycle power_
+- _distance_
+- _stroke rate_
+- _handle forces for the drive phase_
+- _peak force for the drive phase_
+- _drag factor of the flywheel (i.e. resistance level)_
+- _speed and pace_
 
-## Experimental Logbook support
+ESP Rowing Monitor may not directly provide certain metrics such as caloric burn, heart rate, VO2max, etc. due to limitations of the device. These metrics require additional sensors or calculations that may not be supported by ESP Rowing Monitor's hardware or software capabilities. Users should refer to the [Limitations](docs/limitation.md#limitations) section for more detailed information on which metrics may not be available directly from ESP Rowing Monitor.
 
-The GUI is capable of persisting sessions. However, this is saved to the browser storage which means that it is not transferable between devices automatically. Nevertheless, the GUI provides for an import/export feature that helps with moving the data between devices if necessary.
+### Connectivity
 
-![ESP Rowing Monitor WebGUI Logbook](docs/imgs/ESP-Rowing-Monitor-WebGUI-logbook.jpg)
+ESP Rowing Monitor provides a BLE interface to get the data and metrics it measures.
 
-_Limitations:_
+It supports dual BLE connections, allowing simultaneous use of two clients, e.g. a smartwatch and the [WebGUI](https://abasz.github.io/ESPRowingMonitor-WebGUI/) or other compatible apps (like Kinomap, EXR, etc.).
 
-Even though the Logbook is saved to a fully functional client-side database (IndexedDB) for the web, it is not a persistent storage by default. IndexedDB without StorageManager is just a “best-effort” database that can be erased in situations of low disk space on a device. The browser may delete your database without notifying the user in case it needs to free up space for other website’s data that was used more recently than yours.
+ESP Rowing Monitor supports three standard BLE profiles that allows it to be connected to smart watches and 3rd party apps and smart watches (fully compliant with BLE standards):
 
-It is possible to request via the StorageManager API to persist the data and prevent accidental deletion but this is not perfect as there is no guarantee that persistence can be enabled (its up to the browser, system whether system got permission etc.).
+1. Cycling Speed and Cadence Sensor profile
+2. Power Meter Sensor profile
+3. Fitness Machine Rowing profile (currently experimental)
 
-For further information please see the [here](https://dexie.org/docs/StorageManager) and [here](https://hackernoon.com/persistent-data-what-working-with-the-storage-api-looks-like)
+For further details how to set these up devices connected under Cycling Speed and Cadence profile or Power Meter profile please read the [features section](docs/features.md#bluetooth).
 
-## Backlog
+In addition to the implemented standard profiles it exposes certain custom profiles for additional metrics (fully supported by the official [WebGUI](https://abasz.github.io/ESPRowingMonitor-WebGUI/)). These are:
 
-- Implement calibration feature within the UI
-- Make sessions repayable, especially the force curves
-- Add web firmware flasher with WebSerial to support full browser setup of devices (i.e. drop the requirement of compiling firmware for supported boards)
+1. Extended Metrics (metrics not included in the base profiles)
+2. Handle Forces recorded during the last drive
+3. Impulse time logging (logging of delta times for settings calibration)
+
+Please see more details on their specifications and protocols under [Custom BLE Services](docs/custom-ble-services.md).
+
+### Over-the-Air updates
+
+As of version 6 after the initial installation, an over-the-air Bluetooth update protocol is available. The protocol is implemented in the WebGUI so installation can be done from there.
+
+More details on the specification can be found [here](docs/custom-ble-services.md#over-the-air-updater)
+
+### SD-Card impulse logging
+
+It is possible to log deltaTimes (i.e. time between impulses) to an SD card (if connected and enabled). DeltaTimes are collected in a `vector` and written to SD card on every stroke (after the drive ends) or 4 seconds (which ever happens earlier). This incremental way of making deltaTimes available is to optimize performance.
+
+## 📥 Installation
+
+Please see dedicated [installation page](docs/installation.md)
+
+## ⚙️ Settings
+
+Please see dedicated [settings page](docs/settings.md)
+
+## 🛠️ Technical details
+
+The monitor works by detecting the speed of the rotating flywheel via measuring the time between impulses through a reed or hall sensor on the rowing machine (more on the physics [here](https://github.com/laberning/openrowingmonitor/blob/v1beta/docs/physics_openrowingmonitor.md)).
+
+Please note that, for this monitor to function correctly, you need to measure the rotation speed of the flywheel rather than the handle speed. There are [several discussions](https://github.com/laberning/openrowingmonitor/discussions/95) on this topic under the ORM repos. It is possible that one can make it work but I have not tested such setup. I recommend reading those discussions to better understand the consequences of not measuring the flywheel speed.
+
+### Impulse detection
+
+All the metrics calculated are based on measuring the time between two consecutive impulses. Time is registered via an interrupt that is triggered by the reed/hall sensor connected to the ESP32 MCU. Basically, the ISR gets the current timestamp in microseconds and calculates the delta since the previous interrupt (as well as counts the number of times the ISR is triggered). This information is then fed into the stroke detection algorithm.
+
+One advantage of the ESP32 ISR is that it is real-time (compared to ORM's polling strategy), which in theory would make this solution more accurate. However, testing showed that any deviation of the data produced by ORM and ESP Rowing Monitor is within the margin of error. So there is no real evidence that this added accuracy can be translated into an apparent improvement of the data quality. Actually, due to some noise filtering that ORM has, ORM may be a better choice for certain setups (mostly machines that produce quite some noise).
+
+This project by default uses the same [Theil Sen Quadratic Regression](https://github.com/laberning/openrowingmonitor/blob/v1beta/docs/physics_openrowingmonitor.md#a-mathematical-perspective-on-key-metrics) model to determine torque as ORM, which is used as the main stroke detection algorithm. This is supplemented with a secondary fallback algorithm that uses a different approach compared to the way ORM tackles this. This secondary algorithm fits a linear regression curve to the calculated slopes of the recovery regression lines for every "flank" (i.e., it looks for the slope of slopes on every impulse). The slope of slopes calculated from the data points within a "flank" (once there is no power provided to the flywheel by the rower) becomes flat within a margin as the deceleration of the flywheel becomes fairly constant.
+
+![Recovery slopes chart](docs/imgs/recovery-slopes-chart.jpg)
+
+The default secondary algorithm looks for the moment when the slope of slopes flatlines (again, within a margin set by the user).
+
+Nevertheless, for certain machines (based on experience where only 1 or 2 impulses per rotation is present), the user can select the traditional stroke detection algorithm. There are three options in this respect:
+
+1) the more advanced torque based with the slope of slope as secondary algorithm (recommended for machines capable of producing several impulses per rotation),
+2) the slope based (that is basically the traditional acceleration and deceleration base method), or
+3) use both at the same time
+
+Please note that due to the difference between the Rpi and the ESP32 (including but not limited to the CPU power, flash size, etc.), certain limitations and constraints apply to this project. Please see the limitations section for further details.
+
+## 📋 Backlog
+
+- Allow changing BLE device and model name dynamically
+
+## 🙏 Attribution
+
+[Lars Berning](https://github.com/laberning/) - Original ORM implementation
+
+[Jaap van Ekris](https://github.com/JaapvanEkris) - Lots of help and explanation on the background and inner workings of the upgraded stroke detection algorithm

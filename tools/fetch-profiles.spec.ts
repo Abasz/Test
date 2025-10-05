@@ -1,10 +1,9 @@
-import {
-    extractDeviceInfo,
-    generateProfileKey,
-    extractValue,
-    extractStrokeDetectionType,
-    parseProfileHeader,
-} from "./fetch-profiles";
+import process from "node:process";
+import { join } from "path";
+
+import * as fetchProfiles from "./fetch-profiles";
+
+type FetchSpy = jasmine.Spy<(...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>>;
 
 const TEST_PROFILES = {
     concept2ModelD: `
@@ -116,21 +115,148 @@ const TEST_PROFILES = {
 };
 
 describe("fetch-profiles", (): void => {
-    describe("extractDeviceInfo", (): void => {
+    let fetchSpy: FetchSpy;
+
+    beforeEach((): void => {
+        fetchSpy = spyOn(globalThis, "fetch");
+        spyOn(console, "log").and.stub();
+        spyOn(console, "warn").and.stub();
+        spyOn(console, "error").and.stub();
+    });
+
+    describe("fetchRepositoryFiles function", (): void => {
+        it("should request repository contents", async (): Promise<void> => {
+            const files = [
+                {
+                    name: "concept2.rower-profile.h",
+                    path: "src/profiles/concept2.rower-profile.h",
+                    download_url: "https://example.com/concept2",
+                    type: "file" as const,
+                },
+            ];
+
+            const response = {
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                json: async (): Promise<typeof files> => files,
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            await fetchProfiles.fetchRepositoryFiles("src/profiles");
+
+            expect(fetchSpy).toHaveBeenCalledWith(
+                "https://api.github.com/repos/Abasz/ESPRowingMonitor/contents/src/profiles",
+            );
+        });
+
+        it("should return file list on success", async (): Promise<void> => {
+            const files = [
+                {
+                    name: "concept2.rower-profile.h",
+                    path: "src/profiles/concept2.rower-profile.h",
+                    download_url: "https://example.com/concept2",
+                    type: "file" as const,
+                },
+            ];
+
+            const response = {
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                json: async (): Promise<typeof files> => files,
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            const result = await fetchProfiles.fetchRepositoryFiles("src/profiles");
+
+            expect(result).toEqual(files);
+        });
+
+        it("should throw when the GitHub API response is not ok", async (): Promise<void> => {
+            const response = {
+                ok: false,
+                status: 404,
+                statusText: "Not Found",
+                json: async (): Promise<Array<never>> => [],
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            const failingRequest = fetchProfiles.fetchRepositoryFiles("missing");
+
+            await expectAsync(failingRequest).toBeRejectedWithError(
+                "GitHub API request failed: 404 Not Found",
+            );
+        });
+    });
+
+    describe("fetchFileContent function", (): void => {
+        it("should request file contents", async (): Promise<void> => {
+            const response = {
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                text: async (): Promise<string> => "file-body",
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            await fetchProfiles.fetchFileContent("https://example.com/file");
+
+            expect(fetchSpy).toHaveBeenCalledWith("https://example.com/file");
+        });
+
+        it("should return file contents on success", async (): Promise<void> => {
+            const response = {
+                ok: true,
+                status: 200,
+                statusText: "OK",
+                text: async (): Promise<string> => "file-body",
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            const result = await fetchProfiles.fetchFileContent("https://example.com/file");
+
+            expect(result).toBe("file-body");
+        });
+
+        it("should throw when fetching the file fails", async (): Promise<void> => {
+            const response = {
+                ok: false,
+                status: 500,
+                statusText: "Server Error",
+                text: async (): Promise<string> => "",
+            } as Response;
+
+            fetchSpy.and.resolveTo(response);
+
+            const failingDownload = fetchProfiles.fetchFileContent("https://example.com/file");
+
+            await expectAsync(failingDownload).toBeRejectedWithError(
+                "Failed to fetch file: 500 Server Error",
+            );
+        });
+    });
+
+    describe("extractDeviceInfo method", (): void => {
         it("should extract device name and model number with quotes", (): void => {
-            const result = extractDeviceInfo(TEST_PROFILES.concept2ModelD);
+            const result = fetchProfiles.extractDeviceInfo(TEST_PROFILES.concept2ModelD);
             expect(result.deviceName).toBe("Concept2");
             expect(result.modelNumber).toBe("Model D");
         });
 
         it("should extract device name and model number without quotes", (): void => {
-            const result = extractDeviceInfo(TEST_PROFILES.ergDataPlus);
+            const result = fetchProfiles.extractDeviceInfo(TEST_PROFILES.ergDataPlus);
             expect(result.deviceName).toBe("ErgData");
             expect(result.modelNumber).toBe("Plus 5 ergData");
         });
 
         it("should handle complex model numbers with spaces", (): void => {
-            const result = extractDeviceInfo(TEST_PROFILES.waterRowerS4);
+            const result = fetchProfiles.extractDeviceInfo(TEST_PROFILES.waterRowerS4);
             expect(result.deviceName).toBe("WaterRower");
             expect(result.modelNumber).toBe("S4 Performance Monitor");
         });
@@ -138,14 +264,14 @@ describe("fetch-profiles", (): void => {
         it("should throw error when device name is missing", (): void => {
             const invalidContent = `#define MODEL_NUMBER "Test"`;
             expect((): void => {
-                extractDeviceInfo(invalidContent);
+                fetchProfiles.extractDeviceInfo(invalidContent);
             }).toThrowError(/Failed to parse device name or model number/);
         });
 
         it("should throw error when model number is missing", (): void => {
             const invalidContent = `#define DEVICE_NAME TestDevice`;
             expect((): void => {
-                extractDeviceInfo(invalidContent);
+                fetchProfiles.extractDeviceInfo(invalidContent);
             }).toThrowError(/Failed to parse device name or model number/);
         });
 
@@ -154,127 +280,127 @@ describe("fetch-profiles", (): void => {
                 #define   DEVICE_NAME    TestDevice
                 #define	MODEL_NUMBER	  "Test Model"
             `;
-            const result = extractDeviceInfo(content);
+            const result = fetchProfiles.extractDeviceInfo(content);
             expect(result.deviceName).toBe("TestDevice");
             expect(result.modelNumber).toBe("Test Model");
         });
     });
 
-    describe("generateProfileKey", (): void => {
+    describe("generateProfileKey method", (): void => {
         it("should generate correct camelCase key for Concept2 Model D", (): void => {
-            const key = generateProfileKey("Concept2", "Model D");
+            const key = fetchProfiles.generateProfileKey("Concept2", "Model D");
             expect(key).toBe("concept2ModelD");
         });
 
         it("should generate correct camelCase key for KayakFirst Orange", (): void => {
-            const key = generateProfileKey("KayakFirst", "Orange");
+            const key = fetchProfiles.generateProfileKey("KayakFirst", "Orange");
             expect(key).toBe("kayakFirstOrange");
         });
 
         it("should handle complex model names with multiple words", (): void => {
-            const key = generateProfileKey("WaterRower", "S4 Performance Monitor");
+            const key = fetchProfiles.generateProfileKey("WaterRower", "S4 Performance Monitor");
             expect(key).toBe("waterRowerS4PerformanceMonitor");
         });
 
         it("should handle model names with special characters", (): void => {
-            const key = generateProfileKey("TestDevice", "Model-X_Pro");
+            const key = fetchProfiles.generateProfileKey("TestDevice", "Model-X_Pro");
             expect(key).toBe("testDeviceModelXPro");
         });
 
         it("should handle model names with hyphens and underscores", (): void => {
-            const key = generateProfileKey("TestDevice", "Model-X_Pro");
+            const key = fetchProfiles.generateProfileKey("TestDevice", "Model-X_Pro");
             expect(key).toBe("testDeviceModelXPro");
         });
 
         it("should handle empty model number", (): void => {
-            const key = generateProfileKey("TestDevice", "");
+            const key = fetchProfiles.generateProfileKey("TestDevice", "");
             expect(key).toBe("testDevice");
         });
 
         it("should handle device names with numbers", (): void => {
-            const key = generateProfileKey("Device123", "Model456");
+            const key = fetchProfiles.generateProfileKey("Device123", "Model456");
             expect(key).toBe("device123Model456");
         });
 
         it("should handle lowercase device names", (): void => {
-            const key = generateProfileKey("testdevice", "model name");
+            const key = fetchProfiles.generateProfileKey("testdevice", "model name");
             expect(key).toBe("testdeviceModelName");
         });
     });
 
-    describe("extractValue", (): void => {
+    describe("extractValue method", (): void => {
         it("should extract integer values correctly", (): void => {
             const content = "#define IMPULSES_PER_REVOLUTION 3";
-            const result = extractValue(content, "IMPULSES_PER_REVOLUTION");
+            const result = fetchProfiles.extractValue(content, "IMPULSES_PER_REVOLUTION");
             expect(result).toBe(3);
         });
 
         it("should extract decimal values correctly", (): void => {
             const content = "#define FLYWHEEL_INERTIA 0.07848";
-            const result = extractValue(content, "FLYWHEEL_INERTIA");
+            const result = fetchProfiles.extractValue(content, "FLYWHEEL_INERTIA");
             expect(result).toBe(0.07848);
         });
 
         it("should extract values with various whitespace patterns", (): void => {
             const content = "#define   SPROCKET_RADIUS   1.5";
-            const result = extractValue(content, "SPROCKET_RADIUS");
+            const result = fetchProfiles.extractValue(content, "SPROCKET_RADIUS");
             expect(result).toBe(1.5);
         });
 
         it("should return default value when define is missing", (): void => {
             const content = "#define OTHER_VALUE 123";
-            const result = extractValue(content, "MISSING_VALUE", 255);
+            const result = fetchProfiles.extractValue(content, "MISSING_VALUE", 255);
             expect(result).toBe(255);
         });
 
         it("should throw error when define is missing and no default", (): void => {
             const content = "#define OTHER_VALUE 123";
             expect((): void => {
-                extractValue(content, "MISSING_VALUE");
+                fetchProfiles.extractValue(content, "MISSING_VALUE");
             }).toThrowError(/Required #define MISSING_VALUE was not found/);
         });
 
         it("should handle negative values", (): void => {
             const content = "#define NEGATIVE_VALUE -35.5";
-            const result = extractValue(content, "NEGATIVE_VALUE");
+            const result = fetchProfiles.extractValue(content, "NEGATIVE_VALUE");
             expect(result).toBe(-35.5);
         });
 
         it("should handle scientific notation", (): void => {
             const content = "#define SCIENTIFIC_VALUE 1.23e-4";
-            const result = extractValue(content, "SCIENTIFIC_VALUE");
+            const result = fetchProfiles.extractValue(content, "SCIENTIFIC_VALUE");
             expect(result).toBe(0.000123);
         });
 
         it("should handle values with trailing comments", (): void => {
             const content = "#define FLYWHEEL_INERTIA 0.07848  // This is the flywheel inertia";
-            const result = extractValue(content, "FLYWHEEL_INERTIA");
+            const result = fetchProfiles.extractValue(content, "FLYWHEEL_INERTIA");
             expect(result).toBe(0.07848);
         });
     });
 
-    describe("extractStrokeDetectionType", (): void => {
+    describe("extractStrokeDetectionType method", (): void => {
         it("should return 0 for STROKE_DETECTION_TORQUE", (): void => {
             const content = "#define STROKE_DETECTION_TORQUE";
-            const result = extractStrokeDetectionType(content);
+            const result = fetchProfiles.extractStrokeDetectionType(content);
             expect(result).toBe(0);
         });
 
         it("should return 1 for STROKE_DETECTION_SLOPE", (): void => {
             const content = "#define STROKE_DETECTION_SLOPE";
-            const result = extractStrokeDetectionType(content);
+            const result = fetchProfiles.extractStrokeDetectionType(content);
             expect(result).toBe(1);
         });
 
         it("should return 2 for STROKE_DETECTION_BOTH", (): void => {
             const content = "#define STROKE_DETECTION_BOTH";
-            const result = extractStrokeDetectionType(content);
+            const result = fetchProfiles.extractStrokeDetectionType(content);
             expect(result).toBe(2);
         });
 
         it("should return 0 when no stroke detection type is defined", (): void => {
             const content = "#define OTHER_DEFINE value";
-            const result = extractStrokeDetectionType(content);
+            const result = fetchProfiles.extractStrokeDetectionType(content);
             expect(result).toBe(0);
         });
 
@@ -283,15 +409,16 @@ describe("fetch-profiles", (): void => {
                 #define STROKE_DETECTION_SLOPE
                 #define STROKE_DETECTION_BOTH
             `;
-            const result = extractStrokeDetectionType(content);
+            const result = fetchProfiles.extractStrokeDetectionType(content);
             expect(result).toBe(1);
         });
     });
 
-    describe("parseProfileHeader", (): void => {
+    describe("parseProfileHeader method", (): void => {
         it("should parse Concept2 Model D profile correctly", (): void => {
-            const result = parseProfileHeader(TEST_PROFILES.concept2ModelD);
+            const result = fetchProfiles.parseProfileHeader(TEST_PROFILES.concept2ModelD, "concept2ModelD");
 
+            expect(result.profileId).toBe("concept2ModelD");
             expect(result.name).toBe("Concept2 Model D");
             expect(result.settings.machineSettings.flywheelInertia).toBe(0.07848);
             expect(result.settings.machineSettings.magicConstant).toBe(2.8);
@@ -319,7 +446,10 @@ describe("fetch-profiles", (): void => {
         });
 
         it("should parse KayakFirst Orange profile correctly", (): void => {
-            const result = parseProfileHeader(TEST_PROFILES.kayakFirstOrange);
+            const result = fetchProfiles.parseProfileHeader(
+                TEST_PROFILES.kayakFirstOrange,
+                "kayakFirstOrange",
+            );
 
             expect(result.name).toBe("KayakFirst Orange");
             expect(result.settings.machineSettings.flywheelInertia).toBe(0.0625);
@@ -327,7 +457,7 @@ describe("fetch-profiles", (): void => {
         });
 
         it("should parse WaterRower S4 profile correctly", (): void => {
-            const result = parseProfileHeader(TEST_PROFILES.waterRowerS4);
+            const result = fetchProfiles.parseProfileHeader(TEST_PROFILES.waterRowerS4, "waterRowerS4");
 
             expect(result.name).toBe("WaterRower S4 Performance Monitor");
             expect(result.settings.machineSettings.flywheelInertia).toBe(0.09);
@@ -335,7 +465,7 @@ describe("fetch-profiles", (): void => {
         });
 
         it("should parse ErgData Plus profile correctly (no quotes)", (): void => {
-            const result = parseProfileHeader(TEST_PROFILES.ergDataPlus);
+            const result = fetchProfiles.parseProfileHeader(TEST_PROFILES.ergDataPlus, "ergDataPlus");
 
             expect(result.name).toBe("ErgData Plus 5 ergData");
             expect(result.settings.machineSettings.flywheelInertia).toBe(0.065);
@@ -346,7 +476,7 @@ describe("fetch-profiles", (): void => {
                 "DRIVE_HANDLE_FORCES_MAX_CAPACITY",
                 "COMMENTED_OUT_CAPACITY",
             );
-            const result = parseProfileHeader(contentWithoutCapacity);
+            const result = fetchProfiles.parseProfileHeader(contentWithoutCapacity, "kayakFirstOrange");
 
             expect(result.settings.strokeDetectionSettings.driveHandleForcesMaxCapacity).toBe(255);
         });
@@ -358,7 +488,7 @@ describe("fetch-profiles", (): void => {
             );
 
             expect((): void => {
-                parseProfileHeader(invalidContent);
+                fetchProfiles.parseProfileHeader(invalidContent, "concept2ModelD");
             }).toThrowError(/Required #define FLYWHEEL_INERTIA was not found/);
         });
 
@@ -369,7 +499,7 @@ describe("fetch-profiles", (): void => {
             );
 
             expect((): void => {
-                parseProfileHeader(invalidContent);
+                fetchProfiles.parseProfileHeader(invalidContent, "concept2ModelD");
             }).toThrowError(/Required #define ROTATION_DEBOUNCE_TIME_MIN was not found/);
         });
 
@@ -380,7 +510,7 @@ describe("fetch-profiles", (): void => {
             );
 
             expect((): void => {
-                parseProfileHeader(invalidContent);
+                fetchProfiles.parseProfileHeader(invalidContent, "concept2ModelD");
             }).toThrowError(/Required #define GOODNESS_OF_FIT_THRESHOLD was not found/);
         });
 
@@ -391,12 +521,163 @@ describe("fetch-profiles", (): void => {
             );
 
             expect((): void => {
-                parseProfileHeader(invalidContent);
+                fetchProfiles.parseProfileHeader(invalidContent, "concept2ModelD");
             }).toThrowError(/Required #define IMPULSE_DATA_ARRAY_LENGTH was not found/);
         });
     });
 
-    describe("Integration tests", (): void => {
+    describe("main method", (): void => {
+        const createDependencies = (
+            overrides: Partial<fetchProfiles.FetchProfilesDependencies> = {},
+        ): fetchProfiles.FetchProfilesDependencies => ({
+            fetchRepositoryFiles: jasmine.createSpy("fetchRepositoryFiles"),
+            fetchFileContent: jasmine.createSpy("fetchFileContent"),
+            mkdir: jasmine.createSpy("mkdir"),
+            writeFile: jasmine.createSpy("writeFile"),
+            cwd: (): string => "C:/repo",
+            ...overrides,
+        });
+
+        describe("on the happy path", (): void => {
+            let dependencies: fetchProfiles.FetchProfilesDependencies;
+            let fetchRepositoryFilesSpy: jasmine.Spy;
+            let fetchFileContentSpy: jasmine.Spy;
+            let mkdirSpy: jasmine.Spy;
+            let writeFileSpy: jasmine.Spy;
+
+            beforeEach(async (): Promise<void> => {
+                dependencies = createDependencies();
+                fetchRepositoryFilesSpy = dependencies.fetchRepositoryFiles as jasmine.Spy;
+                fetchFileContentSpy = dependencies.fetchFileContent as jasmine.Spy;
+                mkdirSpy = dependencies.mkdir as jasmine.Spy;
+                writeFileSpy = dependencies.writeFile as jasmine.Spy;
+
+                const files = [
+                    {
+                        name: "concept2ModelD.rower-profile.h",
+                        path: "src/profiles/concept2ModelD.rower-profile.h",
+                        download_url: "https://example.com/concept2ModelD",
+                        type: "file" as const,
+                        profileId: "concept2ModelD",
+                    },
+                ];
+
+                fetchRepositoryFilesSpy.and.resolveTo(files);
+                fetchFileContentSpy.and.resolveTo(TEST_PROFILES.concept2ModelD);
+                mkdirSpy.and.resolveTo(undefined);
+                writeFileSpy.and.resolveTo();
+
+                await fetchProfiles.main(dependencies);
+            });
+
+            it("should fetch repository files", (): void => {
+                expect(fetchRepositoryFilesSpy).toHaveBeenCalledWith("src/profiles");
+            });
+
+            it("should create the data directory", (): void => {
+                expect(mkdirSpy).toHaveBeenCalledWith(join("C:/repo", "src", "common", "data"), {
+                    recursive: true,
+                });
+            });
+
+            it("should download profiles", (): void => {
+                expect(fetchFileContentSpy).toHaveBeenCalledWith("https://example.com/concept2ModelD");
+            });
+
+            it("should write the generated TypeScript output", (): void => {
+                expect(writeFileSpy).toHaveBeenCalled();
+
+                const [outputPath, outputContent, encoding]: [string, string, string] =
+                    writeFileSpy.calls.mostRecent().args as [string, string, string];
+                expect(outputPath).toBe(join("C:/repo", "src", "common", "data", "standard-profiles.ts"));
+                expect(typeof outputContent).toBe("string");
+                expect(outputContent).toContain("concept2ModelD");
+                expect(encoding).toBe("utf-8");
+            });
+        });
+
+        it("should return without writing when no profiles are found", async (): Promise<void> => {
+            const dependencies = createDependencies({
+                fetchRepositoryFiles: jasmine.createSpy("fetchRepositoryFiles"),
+            });
+            const fetchRepositoryFilesSpy = dependencies.fetchRepositoryFiles as jasmine.Spy;
+            const fetchFileContentSpy = dependencies.fetchFileContent as jasmine.Spy;
+            const mkdirSpy = dependencies.mkdir as jasmine.Spy;
+            const writeFileSpy = dependencies.writeFile as jasmine.Spy;
+
+            fetchRepositoryFilesSpy.and.resolveTo([]);
+
+            await fetchProfiles.main(dependencies);
+
+            expect(fetchRepositoryFilesSpy).toHaveBeenCalledWith("src/profiles");
+            expect(fetchFileContentSpy).not.toHaveBeenCalled();
+            expect(mkdirSpy).not.toHaveBeenCalled();
+            expect(writeFileSpy).not.toHaveBeenCalled();
+        });
+
+        it("should continue processing when a profile fails to parse", async (): Promise<void> => {
+            const dependencies = createDependencies();
+            const fetchRepositoryFilesSpy = dependencies.fetchRepositoryFiles as jasmine.Spy;
+            const fetchFileContentSpy = dependencies.fetchFileContent as jasmine.Spy;
+            const writeFileSpy = dependencies.writeFile as jasmine.Spy;
+
+            const files = [
+                {
+                    name: "concept2ModelD.rower-profile.h",
+                    path: "src/profiles/concept2ModelD.rower-profile.h",
+                    download_url: "https://example.com/concept2ModelD",
+                    type: "file" as const,
+                    profileId: "concept2ModelD",
+                },
+                {
+                    name: "brokenProfile.rower-profile.h",
+                    path: "src/profiles/brokenProfile.rower-profile.h",
+                    download_url: "https://example.com/broken",
+                    type: "file" as const,
+                    profileId: "brokenProfile",
+                },
+            ];
+
+            fetchRepositoryFilesSpy.and.resolveTo(files);
+            fetchFileContentSpy.and.returnValues(TEST_PROFILES.concept2ModelD, "invalid content");
+            writeFileSpy.and.resolveTo();
+
+            await fetchProfiles.main(dependencies);
+
+            expect(fetchFileContentSpy.calls.count()).toBe(2);
+            expect(writeFileSpy).toHaveBeenCalledTimes(1);
+
+            const writeFileArgs = writeFileSpy.calls.mostRecent().args as [string, string, string];
+            const outputContent = writeFileArgs[1];
+            expect(outputContent).toContain("concept2ModelD");
+            expect(outputContent).not.toContain("brokenProfile");
+        });
+
+        it("should exit the process when an unexpected error occurs", async (): Promise<void> => {
+            const failure = new Error("network down");
+            const fetchRepositoryFilesSpy = jasmine.createSpy("fetchRepositoryFiles").and.rejectWith(failure);
+            const mkdirSpy = jasmine.createSpy("mkdir");
+            const writeFileSpy = jasmine.createSpy("writeFile");
+            const exitSpy = spyOn(process, "exit").and.callFake((code?: number): never => {
+                throw new Error(`exit-${code}`);
+            });
+
+            await expectAsync(
+                fetchProfiles.main({
+                    fetchRepositoryFiles: fetchRepositoryFilesSpy,
+                    mkdir: mkdirSpy,
+                    writeFile: writeFileSpy,
+                }),
+            ).toBeRejectedWithError("exit-1");
+
+            expect(fetchRepositoryFilesSpy).toHaveBeenCalledWith("src/profiles");
+            expect(mkdirSpy).not.toHaveBeenCalled();
+            expect(writeFileSpy).not.toHaveBeenCalled();
+            expect(exitSpy).toHaveBeenCalledWith(1);
+        });
+    });
+
+    describe("as part of integration tests", (): void => {
         it("should generate correct profile keys for all test profiles", (): void => {
             const testCases = [
                 { content: TEST_PROFILES.concept2ModelD, expectedKey: "concept2ModelD" },
@@ -406,8 +687,11 @@ describe("fetch-profiles", (): void => {
             ];
 
             testCases.forEach(({ content, expectedKey }: { content: string; expectedKey: string }): void => {
-                const deviceInfo = extractDeviceInfo(content);
-                const profileKey = generateProfileKey(deviceInfo.deviceName, deviceInfo.modelNumber);
+                const deviceInfo = fetchProfiles.extractDeviceInfo(content);
+                const profileKey = fetchProfiles.generateProfileKey(
+                    deviceInfo.deviceName,
+                    deviceInfo.modelNumber,
+                );
                 expect(profileKey).toBe(expectedKey);
             });
         });
@@ -422,11 +706,12 @@ describe("fetch-profiles", (): void => {
 
             testCases.forEach(({ content, filename }: { content: string; filename: string }): void => {
                 expect((): void => {
-                    parseProfileHeader(content);
+                    fetchProfiles.parseProfileHeader(content, filename);
                 }).not.toThrow();
 
-                const result = parseProfileHeader(content);
+                const result = fetchProfiles.parseProfileHeader(content, filename);
                 expect(result.name).toBeTruthy();
+                expect(result.profileId).toBe(filename);
                 expect(result.settings).toBeTruthy();
                 expect(result.settings.machineSettings).toBeTruthy();
                 expect(result.settings.sensorSignalSettings).toBeTruthy();
@@ -436,7 +721,7 @@ describe("fetch-profiles", (): void => {
         });
 
         it("should validate all parsed values are numbers and within expected ranges", (): void => {
-            const result = parseProfileHeader(TEST_PROFILES.concept2ModelD);
+            const result = fetchProfiles.parseProfileHeader(TEST_PROFILES.concept2ModelD, "concept2ModelD");
 
             // machine settings should all be positive numbers
             expect(result.settings.machineSettings.flywheelInertia).toBeGreaterThan(0);

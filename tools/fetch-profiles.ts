@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 "use strict";
 
-import { mkdir, writeFile } from "fs/promises";
+import { promises } from "fs";
+import process from "node:process";
 import { join } from "path";
 
 import { ProfileData } from "../src/common/common.interfaces";
+
+export interface FetchProfilesDependencies {
+    fetchRepositoryFiles?: (path: string) => Promise<Array<GitHubFileResponse>>;
+    fetchFileContent?: (downloadUrl: string) => Promise<string>;
+    mkdir?: typeof promises.mkdir;
+    writeFile?: typeof promises.writeFile;
+    cwd?: () => string;
+}
 
 interface GitHubFileResponse {
     name: string;
@@ -13,17 +22,21 @@ interface GitHubFileResponse {
     type: "file" | "dir";
 }
 
+interface RowerProfileFile extends GitHubFileResponse {
+    profileId: string;
+}
+
 const GITHUB_API_BASE = "https://api.github.com";
 const REPO_OWNER = "Abasz";
 const REPO_NAME = "ESPRowingMonitor";
 const PROFILES_PATH = "src/profiles";
-const PROFILE_PATTERN = /\.rower-profile\.h$/;
+const PROFILE_PATTERN = /^(.+)\.rower-profile\.h$/;
 
 const DEFAULTS = {
     DRIVE_HANDLE_FORCES_MAX_CAPACITY: 255,
 };
 
-async function fetchRepositoryFiles(path: string): Promise<Array<GitHubFileResponse>> {
+export async function fetchRepositoryFiles(path: string): Promise<Array<GitHubFileResponse>> {
     const url = `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
 
     const response = await fetch(url);
@@ -37,7 +50,7 @@ async function fetchRepositoryFiles(path: string): Promise<Array<GitHubFileRespo
     return files;
 }
 
-async function fetchFileContent(downloadUrl: string): Promise<string> {
+export async function fetchFileContent(downloadUrl: string): Promise<string> {
     const response = await fetch(downloadUrl);
 
     if (!response.ok) {
@@ -68,10 +81,10 @@ export function extractDeviceInfo(content: string): { deviceName: string; modelN
 export function generateProfileKey(deviceName: string, modelNumber: string): string {
     const camelDeviceName = deviceName.charAt(0).toLowerCase() + deviceName.slice(1);
 
-    // Split on spaces, hyphens, underscores and process each word
-    const words = modelNumber.split(/[\s\-_]+/).filter((word) => word.length > 0);
+    // split on spaces, hyphens, underscores and process each word
+    const words = modelNumber.split(/[\s\-_]+/).filter((word: string): boolean => word.length > 0);
     const camelModelNumber = words
-        .map((word, index) => {
+        .map((word: string, index: number): string => {
             if (index === 0) {
                 return word.charAt(0).toLowerCase() + word.slice(1);
             } else {
@@ -108,7 +121,7 @@ export function extractStrokeDetectionType(content: string): number {
     return 0;
 }
 
-export function parseProfileHeader(content: string): ProfileData {
+export function parseProfileHeader(content: string, profileId: string): ProfileData {
     const deviceInfo = extractDeviceInfo(content);
 
     const requiredMachineSettings = {
@@ -148,6 +161,7 @@ export function parseProfileHeader(content: string): ProfileData {
     };
 
     const profileData: ProfileData = {
+        profileId,
         name: `${deviceInfo.deviceName} ${deviceInfo.modelNumber}`,
         settings: {
             machineSettings: requiredMachineSettings,
@@ -161,7 +175,7 @@ export function parseProfileHeader(content: string): ProfileData {
 }
 
 function generateTypeScriptCode(profiles: Record<string, ProfileData>): string {
-    // Convert strokeDetectionType numbers to enum references
+    // convert strokeDetectionType numbers to enum references
     const profilesWithEnums = Object.fromEntries(
         Object.entries(profiles).map(([key, profile]: [string, ProfileData]): [string, unknown] => {
             const strokeDetectionType = profile.settings.strokeDetectionSettings.strokeDetectionType;
@@ -190,27 +204,22 @@ function generateTypeScriptCode(profiles: Record<string, ProfileData>): string {
     );
 
     let profilesJson = JSON.stringify(profilesWithEnums, undefined, 4)
-        // Remove quotes around enum values
+        // remove quotes around enum values
         .replace(/"strokeDetectionType":\s*"(StrokeDetectionType\.\w+)"/g, '"strokeDetectionType": $1')
-        // Remove quotes around object property names to make valid TypeScript object literal
+        // remove quotes around object property names to make valid TypeScript object literal
         .replace(/"([a-zA-Z_$][a-zA-Z0-9_$]*)":/g, "$1:");
 
-    // Add trailing commas for ESLint compliance
+    // add trailing commas for ESLint compliance
     // Pattern 1: Add comma after property values before closing braces
     profilesJson = profilesJson.replace(/([^,\s])\n(\s*[}\]])/g, "$1,\n$2");
 
-    // Pattern 2: Add comma after closing braces that are followed by other closing braces
+    // pattern 2: Add comma after closing braces that are followed by other closing braces
     profilesJson = profilesJson.replace(/(\n\s*})\n(\s*[}\]])/g, "$1,\n$2");
 
     return `// this file is auto-generated by fetch-profiles.ts
 // do not edit manually - changes will be overwritten
 
-import { IRowingProfileSettings, StrokeDetectionType } from "../common.interfaces";
-
-export interface ProfileData {
-    name: string;
-    settings: IRowingProfileSettings;
-}
+import { ProfileData, StrokeDetectionType } from "../common.interfaces";
 
 export const STANDARD_PROFILES: Record<string, ProfileData> = ${profilesJson};
 
@@ -218,19 +227,40 @@ export const CUSTOM_PROFILE_KEY = "custom";
 `;
 }
 
-export async function main(): Promise<void> {
+export async function main({
+    fetchRepositoryFiles: fetchRepoFiles = fetchRepositoryFiles,
+    fetchFileContent: fetchContent = fetchFileContent,
+    mkdir = promises.mkdir,
+    writeFile = promises.writeFile,
+    cwd = process.cwd.bind(process),
+}: FetchProfilesDependencies = {}): Promise<void> {
     console.log("🚀 Starting profile fetch from ESPRowingMonitor repository...\n");
 
     try {
-        const files = await fetchRepositoryFiles(PROFILES_PATH);
+        const files = await fetchRepoFiles(PROFILES_PATH);
 
-        const profileFiles = files.filter(
-            (file: GitHubFileResponse): boolean => file.type === "file" && PROFILE_PATTERN.test(file.name),
+        const profileFiles = files.reduce(
+            (accumulator: Array<RowerProfileFile>, file: GitHubFileResponse): Array<RowerProfileFile> => {
+                if (file.type !== "file") {
+                    return accumulator;
+                }
+
+                const match = file.name.match(PROFILE_PATTERN);
+
+                if (!match) {
+                    return accumulator;
+                }
+
+                accumulator.push({ ...file, profileId: match[1] });
+
+                return accumulator;
+            },
+            [],
         );
 
         console.log(
             `Found ${profileFiles.length} profile files:`,
-            profileFiles.map((f: GitHubFileResponse): string => f.name),
+            profileFiles.map((file: RowerProfileFile): string => file.name),
             "\n",
         );
 
@@ -244,12 +274,12 @@ export async function main(): Promise<void> {
 
         for (const file of profileFiles) {
             try {
-                const content = await fetchFileContent(file.download_url);
+                const content = await fetchContent(file.download_url);
 
                 const deviceInfo = extractDeviceInfo(content);
                 const profileKey = generateProfileKey(deviceInfo.deviceName, deviceInfo.modelNumber);
 
-                profiles[profileKey] = parseProfileHeader(content);
+                profiles[profileKey] = parseProfileHeader(content, file.profileId);
             } catch (error) {
                 console.error(`Failed to process ${file.name}:`, error);
             }
@@ -257,7 +287,7 @@ export async function main(): Promise<void> {
 
         const typeScriptCode = generateTypeScriptCode(profiles);
 
-        const outputDir = join(process.cwd(), "src", "common", "data");
+        const outputDir = join(cwd(), "src", "common", "data");
         await mkdir(outputDir, { recursive: true });
 
         const outputPath = join(outputDir, "standard-profiles.ts");

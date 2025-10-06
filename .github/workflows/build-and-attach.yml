@@ -150,7 +150,7 @@ jobs:
           Name "ESPTool GUI"
           OutFile "esptool-gui-windows-x64.exe"
           InstallDir "$PROGRAMFILES64\\ESPTool GUI"
-          SetCompress lzma
+          SetCompress auto
           Page directory
           Page instfiles
 

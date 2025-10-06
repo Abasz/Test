@@ -1,0 +1,1177 @@
+#!/usr/bin/env python3
+"""ESPTool GUI - A graphical interface for flashing ESP32/ESP8266 devices.
+
+This tool provides a user-friendly GUI for common esptool operations including:
+- Flashing firmware to ESP32/ESP8266 devices
+- Erasing flash memory
+- Reading device information (MAC address, chip ID)
+- Auto-detection of device types and serial ports
+"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import os
+import re
+import sys
+import threading
+import time
+import tkinter as tk
+import tkinter.font as tkfont
+from pathlib import Path
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from typing import Dict, List, Optional, Tuple
+
+import serial.tools.list_ports as list_ports
+import esptool
+
+# ==================== CONFIGURATION CONSTANTS ====================
+
+# Serial communication settings
+DEFAULT_BAUD = 115200
+DEFAULT_BAUD_FAST = 460800
+AVAILABLE_BAUD_RATES = [
+    "9600", "19200", "38400", "57600", "115200",
+    "230400", "460800", "921600", "1500000"
+]
+DEFAULT_PROBE_TIMEOUT = 3.0
+
+# UI layout settings
+DEFAULT_WINDOW_WIDTH = 900
+DEFAULT_WINDOW_HEIGHT = 720
+SCROLL_THRESHOLD = 650  # Minimum height before showing scrollbar
+DEFAULT_TEXT_HEIGHT = 12  # Lines for text widgets
+MAX_FILE_TREE_HEIGHT = 3  # Maximum files to display in tree
+
+# Settings persistence
+SETTINGS_FILENAME = ".esptool_gui_settings.json"
+
+# Port refresh interval (milliseconds)
+PORT_REFRESH_INTERVAL = 5000
+INITIAL_PORT_PROBE_DELAY = 3000
+
+# Progress bar settings
+PROGRESS_UPDATE_DELAY = 100  # milliseconds
+
+# Chip detection patterns (order matters - check more specific variants first)
+CHIP_PATTERNS_ORDERED = [
+    ("esp32s3", re.compile(r"ESP32[-\s]*S3|ESP32S3", re.I)),
+    ("esp32s2", re.compile(r"ESP32[-\s]*S2|ESP32S2", re.I)),
+    ("esp32c3", re.compile(r"ESP32[-\s]*C3|ESP32C3", re.I)),
+    ("esp32",   re.compile(r"\bESP32\b", re.I)),
+    ("esp8266", re.compile(r"\bESP8266\b", re.I)),
+]
+
+# Chip-specific flash configuration
+KNOWN_CHIPS = {
+    "esp8266": {"flash_addr": "0x00000", "flash_mode": "dio", "flash_freq": "40m"},
+    "esp32":   {"flash_addr": "0x1000",  "flash_mode": "dio", "flash_freq": "40m"},
+    "esp32s2": {"flash_addr": "0x0000",  "flash_mode": "dio", "flash_freq": "40m"},
+    "esp32c3": {"flash_addr": "0x0000",  "flash_mode": "dio", "flash_freq": "40m"},
+    "esp32s3": {"flash_addr": "0x0000",  "flash_mode": "dio", "flash_freq": "40m"},
+}
+
+# Standard firmware file offsets
+ESP32_BOOTLOADER_ADDR = "0x1000"
+ESP32_PARTITION_ADDR = "0x8000"
+ESP32_APP_ADDR = "0x10000"
+
+ESP32_VARIANT_BOOTLOADER_ADDR = "0x0000"  # For S2, S3, C3
+ESP32_VARIANT_PARTITION_ADDR = "0x8000"
+ESP32_VARIANT_APP_ADDR = "0x10000"
+
+# Priority keywords for auto-selecting serial ports
+PORT_PRIORITY_KEYWORDS = [
+    "usb-serial", "cp210", "silicon labs", "cp210x",
+    "ftdi", "ch340", "usb2.0-serial"
+]
+
+# Common firmware file naming patterns
+BOOTLOADER_FILE_NAMES = ["bootloader.bin", "boot.bin"]
+PARTITION_FILE_NAMES = ["partitions.bin"]
+APP_FILE_NAMES = ["firmware.bin", "app.bin", "application.bin", "ota.bin"]
+FIRMWARE_FILE_PRIORITY = [
+    "bootloader", "boot", "partition", "partitions",
+    "firmware", "app", "application", "ota"
+]
+
+# ==================== LOW-LEVEL UTILITY FUNCTIONS ====================
+
+def list_serial_ports() -> List[Tuple[str, str, str]]:
+    """List all available serial ports.
+    
+    Returns:
+        List of tuples containing (device_path, description, hardware_id).
+    """
+    ports = []
+    for p in list_ports.comports():
+        ports.append((p.device, p.description or "", p.hwid or ""))
+    return ports
+
+
+def probe_port_for_chip(
+    port: str, 
+    baud: int = DEFAULT_BAUD, 
+    timeout: float = DEFAULT_PROBE_TIMEOUT
+) -> Optional[str]:
+    """Probe a serial port to detect the connected chip type.
+    
+    Args:
+        port: Serial port device path
+        baud: Baud rate for communication
+        timeout: Timeout in seconds for the probe operation
+        
+    Returns:
+        Raw output from esptool chip_id command, or None if probe failed
+    """
+    args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip_id"]
+    try:
+        rc, output = run_esptool(args)
+        return output if output else None
+    except Exception:
+        return None
+
+
+def detect_chip_from_output(output: Optional[str]) -> Optional[str]:
+    """Parse esptool output to identify chip type.
+    
+    Args:
+        output: Raw output from esptool command
+        
+    Returns:
+        Chip identifier (e.g., "esp32", "esp32s3") or None if not detected
+    """
+    if not output:
+        return None
+    
+    for key, pattern in CHIP_PATTERNS_ORDERED:
+        if pattern.search(output):
+            return key
+    return None
+
+
+def _strip_quotes(s: str) -> str:
+    """Remove surrounding quotes from a string.
+    
+    Args:
+        s: Input string that may be quoted
+        
+    Returns:
+        String with surrounding quotes removed if present
+    """
+    s2 = s.strip()
+    if len(s2) >= 2 and ((s2[0] == s2[-1] == '"') or (s2[0] == s2[-1] == "'")):
+        return s2[1:-1].strip()
+    return s2
+
+def build_flash_entries_from_dir(dirpath: str, chip_hint: Optional[str] = None) -> List[str]:
+    """Build flash entries from firmware directory based on chip type.
+    
+    Scans a directory for common firmware files (bootloader, partitions, app) and
+    maps them to appropriate flash addresses based on the chip type.
+    
+    Args:
+        dirpath: Path to directory containing firmware files
+        chip_hint: Optional chip type hint (e.g., "esp32", "esp32s3")
+        
+    Returns:
+        List of flash entries in "address:filepath" format
+        
+    Raises:
+        ValueError: If dirpath is invalid or directory doesn't exist
+    """
+    if not isinstance(dirpath, str):
+        raise ValueError("dirpath must be a string")
+    dirpath = _strip_quotes(dirpath)
+    p = Path(os.path.expanduser(dirpath))
+    if not p.exists() or not p.is_dir():
+        raise ValueError(f"Provided firmware directory does not exist or is not a directory: {dirpath}")
+
+    files = {f.name.lower(): f for f in p.iterdir() if f.is_file()}
+    entries: List[str] = []
+    chip = (chip_hint or "esp32").lower()
+
+    # Use chip-specific addresses
+    if chip == "esp32":
+        bootloader_addr = ESP32_BOOTLOADER_ADDR
+        partition_addr = ESP32_PARTITION_ADDR
+        app_addr = ESP32_APP_ADDR
+    else:
+        bootloader_addr = ESP32_VARIANT_BOOTLOADER_ADDR
+        partition_addr = ESP32_VARIANT_PARTITION_ADDR
+        app_addr = ESP32_VARIANT_APP_ADDR
+
+    # Map bootloader file
+    for boot_name in BOOTLOADER_FILE_NAMES:
+        if boot_name in files:
+            entries.append(f"{bootloader_addr}:{os.path.abspath(str(files[boot_name]))}")
+            break
+    
+    # Map partition file
+    for part_name in PARTITION_FILE_NAMES:
+        if part_name in files:
+            entries.append(f"{partition_addr}:{os.path.abspath(str(files[part_name]))}")
+            break
+    
+    # Map application file
+    for app_name in APP_FILE_NAMES:
+        if app_name in files:
+            entries.append(f"{app_addr}:{os.path.abspath(str(files[app_name]))}")
+            break
+
+    # Fallback: if no files matched, try to map .bin files by priority
+    if not entries:
+        bin_files = [f for k, f in files.items() if k.endswith(".bin")]
+        if bin_files:
+            def key_fn(x: Path):
+                name = x.name.lower()
+                for idx, token in enumerate(FIRMWARE_FILE_PRIORITY):
+                    if token in name:
+                        return idx
+                return len(FIRMWARE_FILE_PRIORITY)
+            
+            sorted_bins = sorted(bin_files, key=key_fn)
+            if len(sorted_bins) >= 1:
+                entries.append(f"{app_addr}:{os.path.abspath(str(sorted_bins[0]))}")
+            if len(sorted_bins) >= 2:
+                entries.append(f"{partition_addr}:{os.path.abspath(str(sorted_bins[1]))}")
+            if len(sorted_bins) >= 3:
+                entries.append(f"{bootloader_addr}:{os.path.abspath(str(sorted_bins[2]))}")
+    
+    return entries
+
+def parse_file_list(entries: List[str]) -> List[str]:
+    """Parse a list of flash entries into esptool argument format.
+    
+    Converts entries like "0x1000:bootloader.bin" into a flat list suitable
+    for passing to esptool: ["0x1000", "/abs/path/to/bootloader.bin", ...]
+    
+    Args:
+        entries: List of strings in "address:filepath" format
+        
+    Returns:
+        Flat list alternating between addresses and absolute file paths
+        
+    Raises:
+        ValueError: If entry format is invalid
+    """
+    out: List[str] = []
+    for e in entries:
+        s = e.strip()
+        if not s:
+            continue
+        s = _strip_quotes(s)
+        
+        # Try parsing as "address:path"
+        if re.match(r'^\s*(0x[0-9a-fA-F]+|\d+)\s*:', s):
+            left, right = s.split(":", 1)
+        else:
+            if ":" not in s:
+                raise ValueError(f"File entry must include address and path separated by ':' -> {e}")
+            left, right = s.rsplit(":", 1)
+        
+        left = left.strip()
+        right = right.strip()
+        
+        # Determine which is address and which is path
+        if left.startswith("0x") or re.fullmatch(r"\d+", left):
+            addr = left
+            path = right
+        else:
+            addr = right
+            path = left
+        
+        path_abs = os.path.abspath(os.path.expanduser(_strip_quotes(path)))
+        out.append(addr)
+        out.append(path_abs)
+    return out
+
+def run_esptool(args: List[str], output_callback=None) -> Tuple[int, str]:
+    """Execute esptool with given arguments and capture output.
+    
+    Args:
+        args: Command line arguments to pass to esptool
+        output_callback: Optional callback function to receive output line by line
+        
+    Returns:
+        Tuple of (return_code, combined_output_string)
+    """
+    pretty = " ".join(f'"{a}"' if " " in a else a for a in ["esptool"] + args)
+    print("Running:", pretty)
+    
+    # Capture stdout and stderr
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+    output_lines = []
+    
+    try:
+        # Save original sys.argv to restore later
+        original_argv = sys.argv[:]
+        
+        # Set sys.argv as esptool expects it (with script name as first arg)
+        sys.argv = ["esptool"] + args
+        
+        # Redirect stdout and stderr to capture output
+        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+            try:
+                # Call esptool main function
+                esptool.main()
+                rc = 0
+            except SystemExit as e:
+                rc = e.code if e.code is not None else 0
+            except Exception as e:
+                stderr_buf.write(f"Runtime error: {e}\n")
+                rc = 2
+        
+        # Restore original sys.argv
+        sys.argv = original_argv
+        
+        # Combine stdout and stderr output
+        stdout_output = stdout_buf.getvalue()
+        stderr_output = stderr_buf.getvalue()
+        combined_output = stdout_output + stderr_output
+        
+        # Process output line by line for callback
+        if combined_output:
+            lines = combined_output.split('\n')
+            for line in lines:
+                if line.strip():  # Skip empty lines
+                    output_lines.append(line)
+                    if output_callback:
+                        output_callback(line)
+        
+        return rc, '\n'.join(output_lines)
+        
+    except Exception as e:
+        err = f"Failed to run esptool: {e}"
+        if output_callback:
+            output_callback(err)
+        return 2, err
+
+def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) -> Tuple[Optional[str], Dict]:
+    """Automatically select the most appropriate serial port.
+    
+    Selection priority:
+    1. Preferred port if specified and available
+    2. Port with detected chip (if probing enabled)
+    3. Port matching priority keywords (USB-Serial, CP210x, etc.)
+    4. First available port
+    
+    Args:
+        preferred: Preferred port device path to use if available
+        try_probe: Whether to probe ports for chip detection
+        
+    Returns:
+        Tuple of (selected_port_or_None, metadata_dict)
+        metadata includes all_ports list and auto_chip if detected
+    """
+    ports = list_serial_ports()
+    metadata = {"all_ports": ports, "auto_chip": None}
+    
+    # Try preferred port first
+    if preferred:
+        for dev, desc, hwid in ports:
+            if dev == preferred:
+                if try_probe:
+                    out = probe_port_for_chip(dev)
+                    chip = detect_chip_from_output(out)
+                    metadata["auto_chip"] = chip
+                return dev, metadata
+        return preferred, metadata
+
+    # No ports available
+    if not ports:
+        return None, metadata
+
+    # Single port - use it
+    if len(ports) == 1:
+        dev = ports[0][0]
+        if try_probe:
+            out = probe_port_for_chip(dev)
+            chip = detect_chip_from_output(out)
+            metadata["auto_chip"] = chip
+        return dev, metadata
+
+    # Multiple ports - probe for chip detection
+    if try_probe:
+        for dev, desc, hwid in ports:
+            out = probe_port_for_chip(dev)
+            chip = detect_chip_from_output(out)
+            if chip:
+                metadata["auto_chip"] = chip
+                return dev, metadata
+
+    # No chip detected - use priority keywords
+    for dev, desc, hwid in ports:
+        combined = (desc + " " + hwid).lower()
+        if any(k in combined for k in PORT_PRIORITY_KEYWORDS):
+            return dev, metadata
+
+    # Default to first port
+    return ports[0][0], metadata
+
+# ==================== GUI APPLICATION ====================
+
+class ESPToolGUI:
+    """Main GUI application for ESPTool operations.
+    
+    Provides a user-friendly interface for flashing ESP32/ESP8266 devices,
+    including auto-detection of chip types, firmware file management, and
+    progress tracking.
+    """
+    
+    # UI calculation constants
+    _TAB_HEADER_HEIGHT_PX = 128  # Estimated height for tab headers
+    _SAFETY_MARGIN_PX = 12  # Safety margin for scroll calculations
+    
+    def __init__(self, root: tk.Tk):
+        """Initialize the ESPTool GUI application.
+        
+        Args:
+            root: The Tkinter root window
+        """
+        self.root = root
+        self.root.title("ESPTool GUI")
+        self.root.geometry(f"{DEFAULT_WINDOW_WIDTH}x{DEFAULT_WINDOW_HEIGHT}")
+
+        self.settings_file = Path.home() / SETTINGS_FILENAME
+
+        # Initialize Tkinter variables
+        self.port_var = tk.StringVar()
+        self.baud_var = tk.StringVar(value=str(DEFAULT_BAUD_FAST))
+        self.fw_dir_var = tk.StringVar()
+        self.flash_mode_var = tk.StringVar(value="dio")
+        self.flash_freq_var = tk.StringVar(value="40m")
+
+        # Application state
+        self.detected_chip: Optional[str] = None
+        self.flash_entries: List[str] = []
+        self.last_selected_port: Optional[str] = None
+        self.progress_var = tk.DoubleVar()
+        self._last_progress_line: Optional[str] = None
+
+        # -- scrolling container setup --
+        # Outer container
+        self.container = ttk.Frame(self.root)
+        self.container.pack(fill=tk.BOTH, expand=True)
+
+        # Canvas and vertical scrollbar (do NOT pack scrollbar now; pack only when needed)
+        self.canvas = tk.Canvas(self.container, highlightthickness=0)
+        self.vscroll = ttk.Scrollbar(self.container, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vscroll.set)
+
+        # Inner frame that will contain the full UI
+        self.inner = ttk.Frame(self.canvas)
+        self.inner_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+
+        # Pack canvas (do not pack vscroll yet)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # vscroll will be packed only when needed by _on_inner_configure()
+
+        # Bind to make scrollregion responsive and to adjust inner width to canvas
+        self.inner.bind("<Configure>", self._on_inner_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        # Bind root window resize to trigger scroll logic update
+        self.root.bind("<Configure>", self._on_root_configure)
+        # Mousewheel support
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)       # Windows / macOS
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel_linux)   # Linux scroll up
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel_linux)   # Linux scroll down
+
+        # Build UI inside the inner frame (preserve original layout)
+        self.create_widgets(parent=self.inner)
+        self.load_settings()
+
+        # Use auto_select_port to pick initial port without blocking UI for probe
+        preferred = self.last_selected_port or (self.port_var.get().split(" - ", 1)[0] if self.port_var.get() else None)
+        # First detect available ports and choose candidate without probing (non-blocking)
+        selected_port, meta = auto_select_port(preferred=preferred, try_probe=False)
+        ports = list_serial_ports()
+        port_list = [f"{dev} - {desc}" for dev, desc, _ in ports]
+        self.port_combo['values'] = port_list
+        if selected_port:
+            match = next((p for p in port_list if p.startswith(selected_port)), None)
+            if match:
+                self.port_combo.set(match)
+                self.port_var.set(match)
+                # Start an asynchronous probe so we can show 'Detecting...' immediately
+                def _auto_probe_worker(dev=selected_port):
+                    try:
+                        baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                        out = probe_port_for_chip(dev, baud=baud)
+                        chip = detect_chip_from_output(out)
+                        self.root.after(0, self.on_chip_detected, chip, out)
+                    except Exception as e:
+                        self.root.after(0, self.on_chip_detect_error, str(e))
+
+                # Provide immediate UI feedback while probing
+                try:
+                    self.chip_label.config(text="Detecting...", foreground="orange")
+                    # force an update so label is visible before probe finishes
+                    self.root.update_idletasks()
+                except Exception:
+                    pass
+
+                threading.Thread(target=_auto_probe_worker, daemon=True).start()
+        else:
+            self.refresh_ports()
+
+        # ensure scroll state is correct right after layout
+        self.root.after(100, self._on_inner_configure)
+
+        self.root.after(3000, self.periodic_refresh)
+
+    # -- scrolling helpers --
+    def _on_inner_configure(self, event=None):
+        """Handle inner frame configuration changes to manage scrolling behavior.
+        
+        Dynamically shows/hides scrollbar based on available height and adjusts
+        text widget sizes accordingly.
+        """
+        # Update scrollregion to bounding box of all content
+        bbox = self.canvas.bbox("all")
+        if not bbox:
+            # Nothing measured yet; ensure scrollbar hidden
+            try:
+                if self.vscroll.winfo_ismapped():
+                    self.vscroll.pack_forget()
+            except Exception:
+                pass
+            return
+
+        content_height = bbox[3] - bbox[1]
+
+        # Use the actual visible canvas height when deciding
+        canvas_h = self.canvas.winfo_height()
+        # If canvas hasn't been laid out yet it may report 1; defer briefly and retry
+        if canvas_h <= 1:
+            self.root.after(80, self._on_inner_configure)
+            return
+
+        # Scrolling logic:
+        # - If canvas height <= SCROLL_THRESHOLD: show scrollbar and make bottom box fixed size
+        # - If canvas height > SCROLL_THRESHOLD: hide scrollbar and let bottom box expand
+        should_show_scrollbar = canvas_h <= SCROLL_THRESHOLD
+
+        if should_show_scrollbar:
+            self._enable_scrolling_mode(bbox)
+        else:
+            self._enable_expand_mode(canvas_h)
+
+    def _enable_scrolling_mode(self, bbox):
+        """Enable scrolling with fixed-size text boxes.
+        
+        Args:
+            bbox: Bounding box of the canvas content
+        """
+        # Show scrollbar if not visible
+        if not self.vscroll.winfo_ismapped():
+            self.vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+            self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Set scrollregion to the full content bbox so scrolling works
+        self.canvas.configure(scrollregion=bbox)
+        
+        # Set fixed height for text widgets when scrolling is enabled
+        try:
+            self.tab_parent.pack_propagate(True)
+            self.command_output_text.config(height=DEFAULT_TEXT_HEIGHT)
+            self.output_text.config(height=DEFAULT_TEXT_HEIGHT)
+        except Exception:
+            pass
+
+    def _enable_expand_mode(self, canvas_h):
+        """Enable expand mode where text boxes stretch to fill available space.
+        
+        Args:
+            canvas_h: Height of the canvas in pixels
+        """
+        # Hide scrollbar if visible
+        if self.vscroll.winfo_ismapped():
+            try:
+                self.vscroll.pack_forget()
+            except Exception:
+                pass
+        
+        # Clamp scrollregion to canvas size to prevent accidental scrolling
+        try:
+            self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), canvas_h))
+        except Exception:
+            pass
+        
+        # Calculate dynamic text widget height
+        try:
+            # Ensure geometry info is up-to-date
+            self.inner.update_idletasks()
+            self.tab_parent.update_idletasks()
+
+            # Sum requested heights of all other children
+            fixed_h = 0
+            for c in self.inner.winfo_children():
+                if c is self.tab_parent:
+                    continue
+                try:
+                    fixed_h += c.winfo_reqheight()
+                except Exception:
+                    pass
+
+            # Calculate available space with safety margin
+            margin = 8
+            avail = canvas_h - fixed_h - margin
+            if avail < 40:
+                avail = 40
+
+            # Determine line height from font metrics
+            try:
+                font = tkfont.Font(font=self.command_output_text['font'])
+                line_h = font.metrics('linespace') or 14
+            except Exception:
+                line_h = 14
+
+            # Calculate available space for text widgets
+            avail_for_text = avail - self._TAB_HEADER_HEIGHT_PX - self._SAFETY_MARGIN_PX
+
+            # Ensure minimum of DEFAULT_TEXT_HEIGHT lines
+            if avail_for_text < (DEFAULT_TEXT_HEIGHT * line_h):
+                lines = DEFAULT_TEXT_HEIGHT
+            else:
+                lines = int(avail_for_text / line_h)
+
+            # Apply the computed line count
+            try:
+                self.tab_parent.pack_propagate(True)
+                self.command_output_text.config(height=lines)
+                self.output_text.config(height=lines)
+            except Exception:
+                pass
+
+            # Force layout recalculation
+            try:
+                self.tab_parent.update_idletasks()
+                self.inner.update_idletasks()
+            except Exception:
+                pass
+        except Exception as e:
+            # Log major errors only
+            print(f"Error in expand mode: {e}")
+
+    def _on_canvas_configure(self, event):
+        """Handle canvas resize events."""
+        # Ensure inner frame width matches canvas width so widgets wrap nicely
+        try:
+            self.canvas.itemconfigure(self.inner_id, width=event.width)
+        except Exception:
+            pass
+        # After resizing, update scrollregion and check scroll state
+        self._on_inner_configure()
+
+    def _on_root_configure(self, event):
+        """Handle root window resize events."""
+        # Only respond to root window resize events, not child widget events
+        if event.widget == self.root:
+            self.root.after_idle(self._on_inner_configure)
+
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scrolling on Windows/macOS."""
+        try:
+            delta = int(-1 * (event.delta / 120))
+            if delta:
+                self.canvas.yview_scroll(delta, "units")
+        except Exception:
+            pass
+
+    def _on_mousewheel_linux(self, event):
+        """Handle mouse wheel scrolling on Linux."""
+        # Button-4 = up, Button-5 = down
+        if event.num == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self.canvas.yview_scroll(1, "units")
+
+    # ---------- Original UI creation (same as your v3) ----------
+    def create_widgets(self, parent):
+        top_frame = ttk.Frame(parent, padding=8)
+        top_frame.pack(fill=tk.X)
+
+        ttk.Label(top_frame, text="Port:").grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        self.port_combo = ttk.Combobox(top_frame, textvariable=self.port_var, width=40)
+        self.port_combo.grid(row=0, column=1, sticky=tk.W)
+        self.port_combo.bind("<<ComboboxSelected>>", self.on_port_selected)
+        ttk.Button(top_frame, text="Refresh", command=self.refresh_ports).grid(row=0, column=2, padx=6)
+
+        ttk.Label(top_frame, text="Baud:").grid(row=0, column=3, sticky=tk.W, padx=(10, 6))
+        self.baud_combo = ttk.Combobox(top_frame, textvariable=self.baud_var, width=12,
+                                       values=AVAILABLE_BAUD_RATES)
+        self.baud_combo.grid(row=0, column=4, sticky=tk.W)
+
+        ttk.Label(top_frame, text="Chip:").grid(row=1, column=0, sticky=tk.W, pady=(8, 0))
+        self.chip_label = ttk.Label(top_frame, text="Unknown", foreground="gray")
+        self.chip_label.grid(row=1, column=1, sticky=tk.W, pady=(8, 0))
+        ttk.Button(top_frame, text="Detect Chip", command=self.detect_chip).grid(row=1, column=2, padx=6, pady=(8, 0))
+
+        fw_frame = ttk.LabelFrame(parent, text="Firmware directory", padding=8)
+        fw_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
+        ttk.Entry(fw_frame, textvariable=self.fw_dir_var, width=80).grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Button(fw_frame, text="Browse...", command=self.browse_fw_dir).grid(row=0, column=1)
+        ttk.Button(fw_frame, text="Auto-map", command=self.update_file_mapping).grid(row=0, column=2, padx=(6, 0))
+
+        mapping_frame = ttk.LabelFrame(parent, text="File Mapping (double-click address to edit)", padding=8)
+        mapping_frame.pack(fill=tk.BOTH, expand=False, padx=8, pady=(8, 0))
+        columns = ("addr", "file")
+        # Limit to MAX_FILE_TREE_HEIGHT rows as there will never be more than that many files
+        self.mapping_tree = ttk.Treeview(mapping_frame, columns=columns, show="headings", height=MAX_FILE_TREE_HEIGHT)
+        self.mapping_tree.heading("addr", text="Address")
+        self.mapping_tree.heading("file", text="File path")
+        self.mapping_tree.column("addr", width=120, anchor=tk.W)
+        self.mapping_tree.column("file", width=620, anchor=tk.W)
+        self.mapping_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.mapping_tree.bind("<Double-1>", self.on_tree_click)
+        scrollbar = ttk.Scrollbar(mapping_frame, orient=tk.VERTICAL, command=self.mapping_tree.yview)
+        self.mapping_tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        progress_frame = ttk.Frame(parent, padding=8)
+        progress_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X)
+        self.progress_label = ttk.Label(progress_frame, text="Ready")
+        self.progress_label.pack(anchor=tk.W, pady=(4, 0))
+
+        btn_frame = ttk.Frame(parent, padding=8)
+        btn_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
+        ttk.Button(btn_frame, text="Erase Flash", command=self.erase_flash).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Flash Firmware", command=self.flash_firmware).pack(side=tk.RIGHT)
+
+        self.tab_parent = ttk.Notebook(parent)
+        self.tab_parent.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 8))
+
+        tools_tab = ttk.Frame(self.tab_parent)
+        self.tab_parent.add(tools_tab, text="Tools")
+        ttk.Button(tools_tab, text="Read MAC", command=self.read_mac).pack(anchor=tk.W, padx=8, pady=4)
+        ttk.Button(tools_tab, text="Chip ID", command=self.chip_id).pack(anchor=tk.W, padx=8, pady=4)
+        # Store reference to command output text for dynamic sizing
+        self.command_output_text = scrolledtext.ScrolledText(tools_tab, height=DEFAULT_TEXT_HEIGHT)
+        self.command_output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
+
+        log_tab = ttk.Frame(self.tab_parent)
+        self.tab_parent.add(log_tab, text="Log")
+        # Store reference to output text for dynamic sizing
+        self.output_text = scrolledtext.ScrolledText(log_tab, height=DEFAULT_TEXT_HEIGHT) 
+        self.output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
+
+    # ---------- Logging helpers ----------
+    def log_output(self, message: str):
+        ts = time.strftime("%H:%M:%S")
+        self.output_text.insert(tk.END, f"[{ts}] {message}\n")
+        # Do not auto-scroll when adding debug/log lines; keep view where user left it.
+
+    def command_output(self, message: str):
+        ts = time.strftime("%H:%M:%S")
+        self.command_output_text.insert(tk.END, f"[{ts}] {message}\n")
+        # Do not auto-scroll when adding command output; parse_and_update_progress
+        # will update progress but should not force scroll.
+
+    def esptool_output(self, message: str):
+        def _insert():
+            if '\r' in message:
+                msg = message.split('\r')[-1].strip()
+            else:
+                msg = message
+            self.command_output_text.insert(tk.END, f"{msg}\n")
+            self.parse_and_update_progress(msg)
+        self.root.after(0, _insert)
+
+    def parse_and_update_progress(self, message: str):
+        m = re.search(r'(\d{1,3}(?:\.\d+)?)%\s*([0-9,]+)/([0-9,]+)\s*bytes', message)
+        if m:
+            pct = float(m.group(1))
+            try:
+                self.progress_var.set(pct)
+                cur = int(m.group(2).replace(",", ""))
+                tot = int(m.group(3).replace(",", ""))
+                self.progress_label.config(text=f"{pct:.1f}% — {cur:,}/{tot:,} bytes")
+            except Exception:
+                self.progress_label.config(text=f"{pct:.1f}%")
+            return
+        if "100.0%" in message or "Flash complete" in message:
+            self.progress_var.set(100.0)
+            self.progress_label.config(text="Flash complete!")
+
+    # ---------- Port & chip helpers (unchanged logic) ----------
+    def refresh_ports(self):
+        ports = list_serial_ports()
+        port_list = [f"{dev} - {desc}" for dev, desc, _ in ports]
+        self.port_combo['values'] = port_list
+
+        # Get currently selected device (if any)
+        current_value = self.port_var.get()
+        available_ports = [p.split(" - ", 1)[0] for p in port_list]
+
+        # If current selection exists and still available, keep it as-is
+        if current_value:
+            curr_dev = current_value.split(" - ", 1)[0] if " - " in current_value else current_value
+            if curr_dev in available_ports:
+                # Current selection is still available - keep it
+                return
+            else:
+                # Current selection is no longer available - clear it
+                self.port_var.set("")
+                self.port_combo.set("")
+                # Clear detected chip state/UI when the selected port disappears
+                try:
+                    self.detected_chip = None
+                    self.chip_label.config(text="Unknown", foreground="gray")
+                except Exception:
+                    pass
+                self.log_output(f"Previously selected port {curr_dev} is no longer available")
+
+        # Check if the last_selected_port (from settings) has come back online
+        if self.last_selected_port:
+            last_dev = self.last_selected_port.split(" - ", 1)[0] if " - " in self.last_selected_port else self.last_selected_port
+            if last_dev in available_ports:
+                # Last selected port is back - reselect it
+                match = next((p for p in port_list if p.startswith(last_dev)), None)
+                if match:
+                    self.port_combo.set(match)
+                    self.port_var.set(match)
+                    self.log_output(f"Previously selected port {last_dev} is back online - reselecting")
+                    # Trigger the same detection flow as when a user selects a port
+                    try:
+                        # This will set the UI to 'Detecting...' and start the probe thread
+                        self.on_port_selected()
+                    except Exception:
+                        pass
+                    return
+
+        # Otherwise, leave selection empty (no auto-selection to first port)
+        self.log_output(f"{len(port_list)} serial ports found")
+
+    def periodic_refresh(self):
+        self.refresh_ports()
+        self.root.after(5000, self.periodic_refresh)
+
+    def get_selected_port(self) -> Optional[str]:
+        v = self.port_var.get()
+        if not v:
+            return None
+        return v.split(" - ", 1)[0] if " - " in v else v
+
+    def on_port_selected(self, event=None):
+        selected = self.get_selected_port()
+        if selected:
+            self.last_selected_port = selected
+        # Reset detected chip state when user changes port and show probing state
+        self.detected_chip = None
+        try:
+            self.chip_label.config(text="Detecting...", foreground="orange")
+            # Ensure label updates before the probe starts
+            try:
+                self.root.update_idletasks()
+            except Exception:
+                pass
+        except Exception:
+            # Fallback to Unknown if updating fails
+            try:
+                self.chip_label.config(text="Unknown", foreground="gray")
+            except Exception:
+                pass
+        self.save_settings()
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                out = probe_port_for_chip(selected, baud=baud)
+                chip = detect_chip_from_output(out)
+                self.root.after(0, self.on_chip_detected, chip, out)
+            except Exception as e:
+                self.root.after(0, self.on_chip_detect_error, str(e))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def detect_chip(self):
+        """Probe the currently selected port for chip identification in a worker thread."""
+        port = self.get_selected_port()
+        if not port:
+            messagebox.showerror("Error", "Please select a serial port first")
+            return
+        # Provide immediate UI feedback
+        self.chip_label.config(text="Detecting...", foreground="orange")
+
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                out = probe_port_for_chip(port, baud=baud)
+                chip = detect_chip_from_output(out)
+                self.root.after(0, self.on_chip_detected, chip, out)
+            except Exception as e:
+                self.root.after(0, self.on_chip_detect_error, str(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_chip_detected(self, chip: Optional[str], raw_output: Optional[str]):
+        if chip:
+            self.detected_chip = chip
+            self.chip_label.config(text=chip.upper(), foreground="green")
+            self.log_output(f"Detected chip: {chip}")
+            if chip in KNOWN_CHIPS:
+                settings = KNOWN_CHIPS[chip]
+                self.flash_mode_var.set(settings.get("flash_mode", "dio"))
+                self.flash_freq_var.set(settings.get("flash_freq", "40m"))
+                if chip.startswith("esp32") and int(self.baud_var.get() or 0) <= DEFAULT_BAUD:
+                    self.baud_var.set(str(DEFAULT_BAUD_FAST))
+            if self.fw_dir_var.get():
+                self.update_file_mapping()
+        else:
+            self.chip_label.config(text="Detection failed", foreground="red")
+            self.log_output("Chip detection failed")
+            if raw_output:
+                excerpt = raw_output if len(raw_output) < 1000 else raw_output[:1000] + "..."
+                self.log_output(excerpt)
+
+    def on_chip_detect_error(self, err: str):
+        self.chip_label.config(text="Error", foreground="red")
+        self.log_output(f"Chip detection error: {err}")
+
+    # ---------- File mapping, flashing and other functions unchanged ----------
+    def browse_fw_dir(self):
+        d = filedialog.askdirectory(title="Select firmware directory")
+        if d:
+            self.fw_dir_var.set(d)
+            self.update_file_mapping()
+            self.save_settings()
+
+    def update_file_mapping(self):
+        fw_dir = self.fw_dir_var.get()
+        for it in self.mapping_tree.get_children():
+            self.mapping_tree.delete(it)
+        if not fw_dir:
+            self.log_output("No firmware directory selected")
+            return
+        if not os.path.isdir(fw_dir):
+            self.log_output(f"Directory does not exist: {fw_dir}")
+            return
+        try:
+            entries = build_flash_entries_from_dir(fw_dir, chip_hint=self.detected_chip)
+            self.flash_entries = entries[:]
+            for entry in entries:
+                if ":" in entry:
+                    addr, path = entry.split(":", 1)
+                    self.mapping_tree.insert("", "end", values=(addr, path))
+            self.log_output(f"Mapped {len(entries)} file(s) from: {fw_dir}")
+        except Exception as e:
+            self.log_output(f"Error mapping files: {e}")
+            messagebox.showerror("Error", f"Failed to map files: {e}")
+
+    def on_tree_click(self, event):
+        region = self.mapping_tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        col = self.mapping_tree.identify_column(event.x)
+        row = self.mapping_tree.identify_row(event.y)
+        if col != "#1":
+            return
+        item = row
+        values = list(self.mapping_tree.item(item, "values"))
+        if not values:
+            return
+        cur_addr = values[0]
+        bbox = self.mapping_tree.bbox(item, col)
+        if not bbox:
+            return
+        x, y, width, height = bbox
+        entry = tk.Entry(self.mapping_tree)
+        entry.insert(0, cur_addr)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.focus_set()
+        def finish(event=None):
+            new_addr = entry.get().strip()
+            if not (new_addr.startswith("0x") or new_addr.isdigit()):
+                messagebox.showerror("Invalid address", "Address must be hex (0x...) or decimal")
+                entry.destroy()
+                return
+            values[0] = new_addr
+            self.mapping_tree.item(item, values=values)
+            entry.destroy()
+            self.update_flash_entries_from_tree()
+        entry.bind("<Return>", finish)
+        entry.bind("<FocusOut>", finish)
+        entry.bind("<Escape>", lambda e: entry.destroy())
+
+    def update_flash_entries_from_tree(self):
+        fw_dir = self.fw_dir_var.get()
+        new_entries: List[str] = []
+        for it in self.mapping_tree.get_children():
+            addr, path = self.mapping_tree.item(it, "values")
+            if not os.path.isabs(path):
+                full = os.path.join(fw_dir, os.path.basename(path)) if fw_dir else path
+            else:
+                full = path
+            if not os.path.exists(full):
+                self.log_output(f"Warning: mapped file not found: {full}")
+            new_entries.append(f"{addr}:{full}")
+        self.flash_entries = new_entries
+
+    def flash_firmware(self):
+        port = self.get_selected_port()
+        if not port:
+            messagebox.showerror("Error", "Please select a serial port first")
+            return
+        if not self.flash_entries:
+            messagebox.showerror("Error", "No files mapped to flash (use Auto-map or add files)")
+            return
+        if not messagebox.askyesno("Confirm", f"Flash {len(self.flash_entries)} file(s) to {port}?"):
+            return
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                flash_args = parse_file_list(self.flash_entries)
+                args: List[str] = ["--port", port, "--baud", str(baud), "write-flash"]
+                if self.flash_mode_var.get():
+                    args += ["--flash-mode", self.flash_mode_var.get()]
+                if self.flash_freq_var.get():
+                    args += ["--flash-freq", self.flash_freq_var.get()]
+                args += flash_args
+                preview = " ".join(f'"{a}"' if " " in a else a for a in ["esptool"] + args)
+                self.root.after(0, self.command_output, f"Running: {preview}")
+                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                if rc == 0:
+                    self.root.after(0, self.command_output, "Flash finished successfully")
+                    self.root.after(0, messagebox.showinfo, "Success", "Flash completed")
+                else:
+                    self.root.after(0, self.command_output, f"Flash failed with code {rc}")
+                    self.root.after(0, messagebox.showerror, "Error", f"Flash failed (rc={rc})")
+            except Exception as e:
+                self.root.after(0, self.command_output, f"Flash error: {e}")
+        self.progress_var.set(0.0)
+        self.progress_label.config(text="Starting flash...")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def erase_flash(self):
+        port = self.get_selected_port()
+        if not port:
+            messagebox.showerror("Error", "Please select a serial port first")
+            return
+        if not messagebox.askyesno("Confirm erase", f"Erase entire flash on {port}?"):
+            return
+        def start_indeterminate():
+            self.progress_bar.config(mode='indeterminate')
+            try:
+                self.progress_bar.start(10)
+            except Exception:
+                pass
+            self.progress_label.config(text="Erasing flash...")
+        def stop_indeterminate():
+            try:
+                self.progress_bar.stop()
+            except Exception:
+                pass
+            self.progress_bar.config(mode='determinate')
+            self.progress_var.set(0.0)
+            self.progress_label.config(text="Ready")
+        start_indeterminate()
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                args = ["--port", port, "--baud", str(baud), "erase-flash"]
+                self.root.after(0, self.command_output, f"Running: esptool {' '.join(args)}")
+                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                self.root.after(0, stop_indeterminate)
+                if rc == 0:
+                    self.root.after(0, self.command_output, "Erase completed")
+                    self.root.after(0, messagebox.showinfo, "Success", "Erase completed")
+                else:
+                    self.root.after(0, self.command_output, f"Erase failed (rc={rc})")
+                    self.root.after(0, messagebox.showerror, "Error", f"Erase failed (rc={rc})")
+            except Exception as e:
+                self.root.after(0, stop_indeterminate)
+                self.root.after(0, self.command_output, f"Erase error: {e}")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def read_mac(self):
+        port = self.get_selected_port()
+        if not port:
+            messagebox.showerror("Error", "Please select a serial port first")
+            return
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "read-mac"]
+                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                if rc == 0:
+                    self.root.after(0, self.command_output, "Read MAC finished")
+                else:
+                    self.root.after(0, self.command_output, f"Read MAC failed (rc={rc})")
+            except Exception as e:
+                self.root.after(0, self.command_output, f"Read MAC error: {e}")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def chip_id(self):
+        port = self.get_selected_port()
+        if not port:
+            messagebox.showerror("Error", "Please select a serial port first")
+            return
+        def worker():
+            try:
+                baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip-id"]
+                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                if rc == 0:
+                    self.root.after(0, self.command_output, "chip-id finished")
+                else:
+                    self.root.after(0, self.command_output, f"chip-id failed (rc={rc})")
+            except Exception as e:
+                self.root.after(0, self.command_output, f"chip-id error: {e}")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def save_settings(self):
+        settings = {
+            "port": self.port_var.get(),
+            "baud": self.baud_var.get(),
+            "fw_dir": self.fw_dir_var.get(),
+            "flash_mode": self.flash_mode_var.get(),
+            "flash_freq": self.flash_freq_var.get(),
+            "last_selected_port": self.last_selected_port,
+        }
+        try:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=2)
+        except Exception as e:
+            self.log_output(f"Failed to save settings: {e}")
+
+    def load_settings(self):
+        if not self.settings_file.exists():
+            return
+        try:
+            with open(self.settings_file, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            if s.get("port"):
+                self.port_var.set(s.get("port"))
+            if s.get("baud"):
+                self.baud_var.set(str(s.get("baud")))
+            if s.get("fw_dir"):
+                self.fw_dir_var.set(s.get("fw_dir"))
+            if s.get("flash_mode"):
+                self.flash_mode_var.set(s.get("flash_mode"))
+            if s.get("flash_freq"):
+                self.flash_freq_var.set(s.get("flash_freq"))
+            self.last_selected_port = s.get("last_selected_port")
+            if self.fw_dir_var.get():
+                self.root.after(200, self.update_file_mapping)
+        except Exception as e:
+            self.log_output(f"Failed to load settings: {e}")
+
+    def on_closing(self):
+        self.save_settings()
+        self.root.destroy()
+
+def main():
+    root = tk.Tk()
+    app = ESPToolGUI(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        app.on_closing()
+
+if __name__ == "__main__":
+    main()

@@ -80,90 +80,133 @@ jobs:
       strategy:
         matrix:
           include:
-            - os: ubuntu-latest
-              platform: linux
-              artifact_name: esptool-gui
-              asset_name: esptool-gui-linux-x64
-            - os: windows-latest
-              platform: windows
-              artifact_name: esptool-gui.exe
-              asset_name: esptool-gui-windows-x64.exe
-            - os: macos-latest
-              platform: macos
-              artifact_name: esptool-gui
-              asset_name: esptool-gui-macos-x64
-  
-      steps:
-        - name: 📥 Checkout repository
-          uses: actions/checkout@v4
-  
-        - name: 🔧 Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.13'
-  
-        - name: 📦 Install dependencies
-          run: |
-            python -m pip install --upgrade pip
-            pip install pyinstaller pyserial esptool
-  
-        - name: 🏗️ Build executable with PyInstaller (Linux/Windows)
-          if: runner.os != 'macOS'
-          working-directory: tools
-          run: |
-            pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" \
-              --hidden-import serial.tools.list_ports \
-              --hidden-import esptool \
-              --hidden-import tkinter \
-              --hidden-import tkinter.ttk \
-              --hidden-import tkinter.scrolledtext \
-              --hidden-import tkinter.filedialog \
-              --hidden-import tkinter.messagebox \
-              esptool_gui.py
-          shell: bash
-  
-        - name: 🏗️ Build executable with PyInstaller (macOS .app bundle)
-          if: runner.os == 'macOS'
-          working-directory: tools
-          run: |
-            # On macOS create an onedir .app bundle instead of --onefile
-            pyinstaller --windowed --onedir --name "${{ matrix.artifact_name }}" \
-              --hidden-import serial.tools.list_ports \
-              --hidden-import esptool \
-              --hidden-import tkinter \
-              --hidden-import tkinter.ttk \
-              --hidden-import tkinter.scrolledtext \
-              --hidden-import tkinter.filedialog \
-              --hidden-import tkinter.messagebox \
-              esptool_gui.py
-          shell: bash
-  
-        - name: 📦 Prepare release asset (Linux)
-          if: runner.os == 'Linux'
-          working-directory: tools
-          run: |
-            chmod +x dist/${{ matrix.artifact_name }}
-            mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-  
-        - name: 📦 Prepare release asset (Windows)
-          if: runner.os == 'Windows'
-          working-directory: tools
-          shell: bash
-          run: |
-            mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-  
-        - name: 📦 Prepare release asset (macOS .app -> tar.gz)
-          if: runner.os == 'macOS'
-          working-directory: tools
-          run: |
-            # macOS produces a <name>.app directory — package it as a tar.gz for upload
-            tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
-  
-        - name: 📎 Upload GUI executable to release
-          uses: softprops/action-gh-release@v2
-          with:
-            files: "tools/${{ matrix.asset_name }}*"
-            fail_on_unmatched_files: true
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: esptool-gui
+            asset_name: esptool-gui-linux-x64
+          - os: windows-latest
+            platform: windows
+            artifact_name: esptool-gui.exe
+            asset_name: esptool-gui-windows-x64.exe
+          - os: macos-latest
+            platform: macos
+            artifact_name: esptool-gui
+            asset_name: esptool-gui-macos-x64
 
+      steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyserial esptool
+
+      - name: 🏗️ Build executable with PyInstaller (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools
+        run: |
+          pyinstaller --onefile --windowed --name "esptool-gui" \
+            --hidden-import serial.tools.list_ports \
+            --hidden-import esptool \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.scrolledtext \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            esptool_gui.py
+        shell: bash
+
+      - name: "🏗️ Build executable (Windows: debug onefile + onedir + NSIS installer)"
+        if: runner.os == 'Windows'
+        working-directory: tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller==6.16.0 pyserial esptool
+
+          # 1) Debug console onefile (run from CMD to capture stderr)
+          pyinstaller --clean --onefile --name "esptool-gui-console" `
+            --log-level=DEBUG --noupx `
+            --hidden-import serial.tools.list_ports `
+            --hidden-import esptool `
+            esptool_gui.py
+
+          # 2) Stable GUI as onedir (recommended for end-users)
+          pyinstaller --clean --windowed --onedir --name "esptool-gui" `
+            --log-level=INFO `
+            --hidden-import serial.tools.list_ports `
+            --hidden-import esptool `
+            esptool_gui.py
+
+          # 3) Create an NSIS installer (single .exe) so users get a single installer file
+          choco install nsis -y
+          $nsisScript = @"
+          Name "ESPTool GUI"
+          OutFile "esptool-gui-windows-x64.exe"
+          InstallDir "$PROGRAMFILES64\\ESPTool GUI"
+          SetCompress lzma
+          Page directory
+          Page instfiles
+
+          Section "Install"
+            SetOutPath "$INSTDIR"
+            File /r "dist\\esptool-gui\\*"
+            CreateShortcut "$DESKTOP\\ESPTool GUI.lnk" "$INSTDIR\\esptool-gui.exe"
+          SectionEnd
+          "@
+          $nsisScript | Out-File -Encoding ASCII tool_installer.nsi
+          & "C:\\Program Files (x86)\\NSIS\\makensis.exe" tool_installer.nsi
+
+      - name: 🏗️ Build executable with PyInstaller (macOS .app bundle)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # On macOS create an onedir .app bundle instead of --onefile
+          pyinstaller --windowed --onedir --name "${{ matrix.artifact_name }}" \
+            --hidden-import serial.tools.list_ports \
+            --hidden-import esptool \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.scrolledtext \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            esptool_gui.py
+        shell: bash
+
+      - name: 📦 Prepare release asset (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools
+        run: |
+          chmod +x dist/${{ matrix.artifact_name }}
+          mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+
+      - name: 📦 Prepare release asset (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tools
+        shell: pwsh
+        run: |
+          # move debug console exe and installer into tools/ for upload
+          Move-Item -Path "dist\esptool-gui-console.exe" -Destination "${{ matrix.asset_name }}-console.exe"
+          Move-Item -Path "esptool-gui-windows-x64.exe" -Destination "${{ matrix.asset_name }}.exe"
+
+      - name: 📦 Prepare release asset (macOS .app -> tar.gz)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # macOS produces a <name>.app directory — package it as a tar.gz for upload
+          tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
+
+      - name: 📎 Upload GUI executable to release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Accept executables, installers, or tarballs
+          files: "tools/${{ matrix.asset_name }}*"
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

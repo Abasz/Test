@@ -75,9 +75,9 @@ jobs:
 #         env:
 #           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-gui-executables:
+build-gui-executables:
     runs-on: ${{ matrix.os }}
-    # needs: build-and-upload
+    needs: build-and-upload
     strategy:
       matrix:
         include:
@@ -108,10 +108,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller pyserial esptool
 
-      - name: 🏗️ Build executable with PyInstaller
+      - name: 🏗️ Build executable with PyInstaller (Linux/Windows)
+        if: runner.os != 'macOS'
         working-directory: tools
         run: |
-          pyinstaller --onefile --windowed --name "ESPTool GUI" \
+          pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" \
             --hidden-import serial.tools.list_ports \
             --hidden-import esptool \
             --hidden-import tkinter \
@@ -119,12 +120,27 @@ jobs:
             --hidden-import tkinter.scrolledtext \
             --hidden-import tkinter.filedialog \
             --hidden-import tkinter.messagebox \
-            --upx-dir /usr/local/share/ufx \
             esptool_gui.py
         shell: bash
 
-      - name: 📦 Prepare release asset (Unix)
-        if: runner.os != 'Windows'
+      - name: 🏗️ Build executable with PyInstaller (macOS .app bundle)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # On macOS create an onedir .app bundle instead of --onefile
+          pyinstaller --windowed --onedir --name "${{ matrix.artifact_name }}" \
+            --hidden-import serial.tools.list_ports \
+            --hidden-import esptool \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.scrolledtext \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            esptool_gui.py
+        shell: bash
+
+      - name: 📦 Prepare release asset (Linux)
+        if: runner.os == 'Linux'
         working-directory: tools
         run: |
           chmod +x dist/${{ matrix.artifact_name }}
@@ -137,24 +153,18 @@ jobs:
         run: |
           mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
 
+      - name: 📦 Prepare release asset (macOS .app -> tar.gz)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # macOS produces a <name>.app directory — package it as a tar.gz for upload
+          tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
+
       - name: 📎 Upload GUI executable to release
         uses: softprops/action-gh-release@v2
         with:
-          files: tools/${{ matrix.asset_name }}
+          files: "tools/${{ matrix.asset_name }}*"
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  notify-downstream:
-    runs-on: ubuntu-latest
-    needs: [build-gui-executables]
-    if: success()
-    
-    steps:
-      - name: 🚀 Dispatch WebGUI Build
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          repository: Abasz/ESPRowingMonitor-WebGUI
-          event-type: esp-rowing-monitor-release
-          client-payload: '{"tag": "${{ github.ref_name }}"}'

@@ -1,8 +1,6 @@
 name: Build & Attach Firmware to Release
 
 on:
-  workflow_dispatch:
-
   release:
     types: [created]
 
@@ -10,76 +8,77 @@ permissions:
   contents: write
 
 jobs:
-#   build-and-upload:
-#     runs-on: ubuntu-latest
-#     env:
-#       PIO_CLI_CALLER: github-actions
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      PIO_CLI_CALLER: github-actions
 
-#     steps:
-#       - name: 📥 Checkout repository
-#         uses: actions/checkout@v4
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
 
-#       - name: 🔧 Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: '3.x'
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-#       - name: 🔧 Set up PlatformIO Core
-#         run: pip install -U platformio
+      - name: 🔧 Set up PlatformIO Core
+        run: pip install -U platformio
 
-#       - name:  Build binaries for all rowers and board profiles
-#         run: |
-#           echo "🔨 Building binaries"
-#           environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
-#           echo
-#           echo "Environments:"
-#           mapfile -t env_array <<< "$environments"
-#           for env in "${env_array[@]}"; do
-#             echo "- ${env}"
-#           done
-#           pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
+      - name:  Build binaries for all rowers and board profiles
+        run: |
+          echo "🔨 Building binaries"
+          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+          echo
+          echo "Environments:"
+          mapfile -t env_array <<< "$environments"
+          for env in "${env_array[@]}"; do
+            echo "- ${env}"
+          done
+          pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
 
-#       - name: 📦 Prepare zipped firmware binaries
-#         run: |
-#           set -eo pipefail
-#           mkdir -p release_assets
-#           shopt -s nullglob
+      - name: 📦 Prepare zipped firmware binaries
+        run: |
+          set -eo pipefail
+          mkdir -p release_assets
+          shopt -s nullglob
 
-#           for dir in "${{github.workspace}}/.pio/build"/*/; do
-#             environmentName=$(basename "${dir}")
-#             echo "Processing environment: ${environmentName}"
+          for dir in "${{github.workspace}}/.pio/build"/*/; do
+            environmentName=$(basename "${dir}")
+            echo "Processing environment: ${environmentName}"
 
-#             # Require the canonical firmware file produced by PlatformIO
-#             binfile="${dir}firmware.bin"
-#             if [ ! -f "${binfile}" ]; then
-#               echo "ERROR: expected firmware binary '${binfile}' not found for environment ${environmentName}"
-#               exit 1
-#             fi
-#             echo "Using firmware: ${binfile}"
+            # Require the canonical firmware file produced by PlatformIO
+            binfile="${dir}firmware.bin"
+            if [ ! -f "${binfile}" ]; then
+              echo "ERROR: expected firmware binary '${binfile}' not found for environment ${environmentName}"
+              exit 1
+            fi
+            echo "Using firmware: ${binfile}"
 
-#             chip_id=$(esptool image_info "${binfile}" 2>&1 | sed -nE 's/.*Chip ID:.*\(([^)]+)\).*/\1/p')
+            chip_id=$(esptool image_info "${binfile}" 2>&1 | sed -nE 's/.*Chip ID:.*\(([^)]+)\).*/\1/p')
 
-#             # sanitize chip_id to safe filename chars
-#             chip_id_safe=$(echo "${chip_id}" | sed -E 's/[^A-Za-z0-9._-]//g')
+            # sanitize chip_id to safe filename chars
+            chip_id_safe=$(echo "${chip_id}" | sed -E 's/[^A-Za-z0-9._-]//g')
 
-#             zipname="${{github.workspace}}/release_assets/firmware_${environmentName}_${chip_id_safe}.zip"
-#             echo "Creating zip: ${zipname} (bin: ${binfile})"
-#             zip -j -q "${zipname}" "${binfile}"
-#           done
+            zipname="${{github.workspace}}/release_assets/firmware_${environmentName}_${chip_id_safe}.zip"
+            echo "Creating zip: ${zipname} (bin: ${binfile})"
+            zip -j -q "${zipname}" "${binfile}"
+          done
 
-#       - name: 📎 Upload firmware binaries
-#         uses: softprops/action-gh-release@v2
-#         with:
-#           files: ${{github.workspace}}/release_assets/*
-#           fail_on_unmatched_files: true
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 📎 Upload firmware binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{github.workspace}}/release_assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-gui-executables:
-      runs-on: ${{ matrix.os }}
-      strategy:
-        matrix:
-          include:
+    runs-on: ${{ matrix.os }}
+    needs: build-and-upload
+    strategy:
+      matrix:
+        include:
           - os: ubuntu-latest
             platform: linux
             artifact_name: esptool-gui
@@ -93,7 +92,7 @@ jobs:
             artifact_name: esptool-gui
             asset_name: esptool-gui-macos-x64
 
-      steps:
+    steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
@@ -107,11 +106,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller pyserial esptool
 
-      - name: 🏗️ Build executable with PyInstaller (Linux)
-        if: runner.os == 'Linux'
+      - name: 🏗️ Build executable with PyInstaller (Linux/Windows)
+        if: runner.os != 'macOS'
         working-directory: tools
         run: |
-          pyinstaller --onefile --windowed --name "esptool-gui" \
+          pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" \
             --hidden-import serial.tools.list_ports \
             --hidden-import esptool \
             --hidden-import tkinter \
@@ -121,47 +120,6 @@ jobs:
             --hidden-import tkinter.messagebox \
             esptool_gui.py
         shell: bash
-
-      - name: "🏗️ Build executable (Windows: debug onefile + onedir + NSIS installer)"
-        if: runner.os == 'Windows'
-        working-directory: tools
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller==6.16.0 pyserial esptool
-
-          # 1) Debug console onefile (run from CMD to capture stderr)
-          pyinstaller --clean --onefile --name "esptool-gui-console" `
-            --log-level=DEBUG --noupx `
-            --hidden-import serial.tools.list_ports `
-            --hidden-import esptool `
-            esptool_gui.py
-
-          # 2) Stable GUI as onedir (recommended for end-users)
-          pyinstaller --clean --windowed --onedir --name "esptool-gui" `
-            --log-level=INFO `
-            --hidden-import serial.tools.list_ports `
-            --hidden-import esptool `
-            esptool_gui.py
-
-          # 3) Create an NSIS installer (single .exe) so users get a single installer file
-          choco install nsis -y
-          $nsisScript = @"
-          Name "ESPTool GUI"
-          OutFile "esptool-gui-windows-x64.exe"
-          InstallDir "$PROGRAMFILES64\\ESPTool GUI"
-          SetCompress auto
-          Page directory
-          Page instfiles
-
-          Section "Install"
-            SetOutPath "$INSTDIR"
-            File /r "dist\\esptool-gui\\*"
-            CreateShortcut "$DESKTOP\\ESPTool GUI.lnk" "$INSTDIR\\esptool-gui.exe"
-          SectionEnd
-          "@
-          $nsisScript | Out-File -Encoding ASCII tool_installer.nsi
-          & "C:\\Program Files (x86)\\NSIS\\makensis.exe" tool_installer.nsi
 
       - name: 🏗️ Build executable with PyInstaller (macOS .app bundle)
         if: runner.os == 'macOS'
@@ -189,11 +147,9 @@ jobs:
       - name: 📦 Prepare release asset (Windows)
         if: runner.os == 'Windows'
         working-directory: tools
-        shell: pwsh
+        shell: bash
         run: |
-          # move debug console exe and installer into tools/ for upload
-          Move-Item -Path "dist\esptool-gui-console.exe" -Destination "${{ matrix.asset_name }}-console.exe"
-          Move-Item -Path "esptool-gui-windows-x64.exe" -Destination "${{ matrix.asset_name }}.exe"
+          mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
 
       - name: 📦 Prepare release asset (macOS .app -> tar.gz)
         if: runner.os == 'macOS'
@@ -205,8 +161,21 @@ jobs:
       - name: 📎 Upload GUI executable to release
         uses: softprops/action-gh-release@v2
         with:
-          # Accept executables, installers, or tarballs
           files: "tools/${{ matrix.asset_name }}*"
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-downstream:
+    runs-on: ubuntu-latest
+    needs: [build-and-upload, build-gui-executables]
+    if: success()
+    
+    steps:
+      - name: 🚀 Dispatch WebGUI Build
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          repository: Abasz/ESPRowingMonitor-WebGUI
+          event-type: esp-rowing-monitor-release
+          client-payload: '{"tag": "${{ github.ref_name }}"}'

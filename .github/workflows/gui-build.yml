@@ -91,4 +91,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: esp-rowing-monitor-executable
-          path: dist/esp-rowing-monitor
+          path: dist

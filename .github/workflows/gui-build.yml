@@ -90,7 +90,8 @@ jobs:
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esp-rowing-monitor-executable
+          # Unique artifact name per matrix job to prevent 409 Conflict
+          name: esp-rowing-monitor-executable-${{ matrix.platform }}-run${{ github.run_id }}
           path: |
             tools/dist/*
             tools/*.tar.gz

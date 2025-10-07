@@ -33,7 +33,7 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          pip install pyinstaller pyserial esptool
+          pip install pyinstaller pyserial esptool certifi
 
       - name: 🏗️ Build executable with PyInstaller (Linux/Windows)
         if: runner.os != 'macOS'

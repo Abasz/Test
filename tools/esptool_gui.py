@@ -16,16 +16,21 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
+import urllib.request
+import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, List, Optional, Tuple
 
 import serial.tools.list_ports as list_ports
 import esptool
+import ssl
+import certifi
 
 # ==================== CONFIGURATION CONSTANTS ====================
 
@@ -41,8 +46,9 @@ DEFAULT_PROBE_TIMEOUT = 3.0
 # UI layout settings
 DEFAULT_WINDOW_WIDTH = 900
 DEFAULT_WINDOW_HEIGHT = 720
-SCROLL_THRESHOLD = 650  # Minimum height before showing scrollbar
-DEFAULT_TEXT_HEIGHT = 12  # Lines for text widgets
+SCROLL_THRESHOLD = 660  # Window height threshold for fixed vs dynamic text widget sizing
+DEFAULT_TEXT_HEIGHT = 12  # Fixed lines for text widgets when height <= SCROLL_THRESHOLD
+MIN_TEXT_HEIGHT = 5  # Minimum lines for text widgets when dynamically sizing
 MAX_FILE_TREE_HEIGHT = 3  # Maximum files to display in tree
 
 # Settings persistence
@@ -97,6 +103,14 @@ FIRMWARE_FILE_PRIORITY = [
     "firmware", "app", "application", "ota"
 ]
 
+# GitHub API settings
+GITHUB_API_ENDPOINT = "https://api.github.com/repos/Abasz/Test/releases/latest"
+GITHUB_REQUEST_TIMEOUT = 10  # seconds
+
+# Firmware source modes
+FIRMWARE_MODE_PRECOMPILED = "precompiled"
+FIRMWARE_MODE_CUSTOM = "custom"
+
 # ==================== LOW-LEVEL UTILITY FUNCTIONS ====================
 
 def list_serial_ports() -> List[Tuple[str, str, str]]:
@@ -126,7 +140,7 @@ def probe_port_for_chip(
     Returns:
         Raw output from esptool chip_id command, or None if probe failed
     """
-    args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip_id"]
+    args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip-id"]
     try:
         rc, output = run_esptool(args)
         return output if output else None
@@ -412,6 +426,155 @@ def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) ->
     # Default to first port
     return ports[0][0], metadata
 
+def fetch_github_release(api_url: str = GITHUB_API_ENDPOINT, max_retries: int = 3) -> tuple[Optional[Dict], Optional[str]]:
+    """Fetch latest release metadata from GitHub API with retry mechanism.
+    
+    Args:
+        api_url: GitHub API endpoint URL
+        max_retries: Maximum number of retry attempts
+        
+    Returns:
+        Tuple of (release_metadata_dict_or_None, error_message_or_None)
+    """
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(api_url)
+            req.add_header("Accept", "application/vnd.github.v3+json")
+            with urllib.request.urlopen(req, timeout=GITHUB_REQUEST_TIMEOUT, context=ssl_context) as response:
+                if response.status == 200:
+                    return json.loads(response.read().decode()), None
+                else:
+                    error_msg = f"HTTP {response.status}: {response.reason}"
+                    print(error_msg, flush=True)
+                    if attempt < max_retries - 1:
+                        time.sleep(3)
+                        continue
+                    return None, error_msg
+        except urllib.error.HTTPError as e:
+            error_msg = f"Attempt {attempt + 1}/{max_retries} failed: HTTP {e.code}: {e.reason}"
+            print(error_msg, flush=True)
+            if attempt < max_retries - 1:
+                time.sleep(3)
+                continue
+            return None, error_msg
+        except Exception as e:
+            error_msg = f"Attempt {attempt + 1}/{max_retries} failed: Unexpected error: {type(e).__name__}: {e}"
+            print(error_msg, flush=True)
+            if attempt < max_retries - 1:
+                time.sleep(3)
+                continue
+            return None, error_msg
+
+    return None, "Max retries exceeded"
+
+def parse_firmware_asset_name(asset_name: str) -> Optional[Dict[str, str]]:
+    """Parse firmware asset filename into components.
+    
+    Expected format: firmware_{rowerProfile}-{boardProfile}_{ChipID}.zip
+    Example: firmware_genericAir-FIREBEETLE2_ESP32S3.zip
+    
+    Args:
+        asset_name: Asset filename from GitHub release
+        
+    Returns:
+        Dict with 'rower', 'board', 'chip' keys or None if parse failed
+    """
+    name = asset_name
+    if name.lower().endswith(".zip"):
+        name = name[:-4]
+    
+    # Match pattern: firmware_{rower}-{board}_{chip}
+    pattern = r'^firmware_([^-]+)-([^_]+)_(.+)$'
+    match = re.match(pattern, name)
+    if not match:
+        return None
+    
+    return {
+        "rower": match.group(1),
+        "board": match.group(2),
+        "chip": match.group(3).lower()
+    }
+
+def format_profile_name(profile_name: str) -> str:
+    """Format camelCase profile names to human-readable format.
+    
+    Examples:
+        genericAir -> Generic Air
+        kayakFirst -> Kayak First
+        oldDanube -> Old Danube
+        
+    Args:
+        profile_name: CamelCase profile name
+        
+    Returns:
+        Formatted profile name with proper spacing and capitalization
+    """
+    # Add spaces before uppercase letters (handle transitions)
+    with_spaces = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', profile_name)
+    with_spaces = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', with_spaces)
+    
+    # Capitalize first letter of each word
+    return ' '.join(word.capitalize() for word in with_spaces.split())
+
+def get_compatible_boards(assets: List[Dict], chip: str, rower: str) -> List[str]:
+    """Get list of board profiles compatible with detected chip and selected rower.
+    
+    Args:
+        assets: List of asset dicts from GitHub release
+        chip: Detected chip ID (e.g., "esp32s3", "Unknown")
+        rower: Selected rower profile
+        
+    Returns:
+        List of compatible board profile names
+    """
+    if chip == "Unknown":
+        return []
+    
+    boards = set()
+    for asset in assets:
+        parsed = parse_firmware_asset_name(asset.get("name", ""))
+        if parsed and parsed["chip"] == chip.lower() and parsed["rower"] == rower:
+            boards.add(parsed["board"])
+    return sorted(list(boards))
+
+def download_and_extract_firmware(url: str, dest_dir: str) -> Optional[str]:
+    """Download firmware zip from URL and extract to directory.
+    
+    Args:
+        url: Download URL for firmware zip
+        dest_dir: Destination directory for extraction
+        
+    Returns:
+        Path to extraction directory or None if failed
+    """
+    try:
+        # Download to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+            print(f"Downloading firmware from {url}...")
+            # Use certifi CA bundle for TLS verification
+            ctx = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(url, timeout=30, context=ctx) as response:
+                tmp.write(response.read())
+            tmp_path = tmp.name
+        
+        # Extract zip
+        extract_path = os.path.join(dest_dir, "firmware_extracted")
+        os.makedirs(extract_path, exist_ok=True)
+        
+        print(f"Extracting firmware to {extract_path}...")
+        with zipfile.ZipFile(tmp_path, 'r') as zf:
+            zf.extractall(extract_path)
+        
+        # Clean up temp file
+        os.unlink(tmp_path)
+        
+        return extract_path
+    except Exception as e:
+        print(f"Failed to download/extract firmware: {e}")
+        return None
+
 # ==================== GUI APPLICATION ====================
 
 class ESPToolGUI:
@@ -423,8 +586,8 @@ class ESPToolGUI:
     """
     
     # UI calculation constants
-    _TAB_HEADER_HEIGHT_PX = 128  # Estimated height for tab headers
-    _SAFETY_MARGIN_PX = 12  # Safety margin for scroll calculations
+    _TAB_HEADER_HEIGHT_PX = 130  # Estimated height for tab headers
+    _SAFETY_MARGIN_PX = 22  # Safety margin for scroll calculations
     
     def __init__(self, root: tk.Tk):
         """Initialize the ESPTool GUI application.
@@ -451,13 +614,22 @@ class ESPToolGUI:
         self.last_selected_port: Optional[str] = None
         self.progress_var = tk.DoubleVar()
         self._last_progress_line: Optional[str] = None
+        
+        # GitHub release state
+        self.release_data: Optional[Dict] = None
+        self.available_rowers: List[str] = []
+        self.available_boards: List[str] = []
+        self.firmware_mode_var = tk.StringVar(value=FIRMWARE_MODE_PRECOMPILED)
+        self.rower_var = tk.StringVar()
+        self.board_var = tk.StringVar()
+        self.rower_name_map: Dict[str, str] = {"Custom": "custom"}  # Formatted -> original mapping
 
         # -- scrolling container setup --
         # Outer container
         self.container = ttk.Frame(self.root)
         self.container.pack(fill=tk.BOTH, expand=True)
 
-        # Canvas and vertical scrollbar (do NOT pack scrollbar now; pack only when needed)
+        # Canvas and vertical scrollbar (always visible, auto-disables when not needed)
         self.canvas = tk.Canvas(self.container, highlightthickness=0)
         self.vscroll = ttk.Scrollbar(self.container, orient=tk.VERTICAL, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vscroll.set)
@@ -466,9 +638,9 @@ class ESPToolGUI:
         self.inner = ttk.Frame(self.canvas)
         self.inner_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
 
-        # Pack canvas (do not pack vscroll yet)
+        # Pack scrollbar and canvas (scrollbar always visible, auto-disables)
+        self.vscroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        # vscroll will be packed only when needed by _on_inner_configure()
 
         # Bind to make scrollregion responsive and to adjust inner width to canvas
         self.inner.bind("<Configure>", self._on_inner_configure)
@@ -525,137 +697,103 @@ class ESPToolGUI:
 
     # -- scrolling helpers --
     def _on_inner_configure(self, event=None):
-        """Handle inner frame configuration changes to manage scrolling behavior.
+        """Handle inner frame configuration changes to manage text widget sizing.
         
-        Dynamically shows/hides scrollbar based on available height and adjusts
-        text widget sizes accordingly.
+        Text widgets have:
+        - Minimum: 6 lines (MIN_TEXT_HEIGHT)
+        - Fixed 12 lines when window height <= threshold (DEFAULT_TEXT_HEIGHT)
+        - Dynamic expansion to fill bottom space when window height > threshold
         """
         # Update scrollregion to bounding box of all content
         bbox = self.canvas.bbox("all")
         if not bbox:
-            # Nothing measured yet; ensure scrollbar hidden
-            try:
-                if self.vscroll.winfo_ismapped():
-                    self.vscroll.pack_forget()
-            except Exception:
-                pass
             return
 
-        content_height = bbox[3] - bbox[1]
-
-        # Use the actual visible canvas height when deciding
+        # Use the actual visible canvas height
         canvas_h = self.canvas.winfo_height()
-        # If canvas hasn't been laid out yet it may report 1; defer briefly and retry
+        # If canvas hasn't been laid out yet, defer and retry
         if canvas_h <= 1:
             self.root.after(80, self._on_inner_configure)
             return
 
-        # Scrolling logic:
-        # - If canvas height <= SCROLL_THRESHOLD: show scrollbar and make bottom box fixed size
-        # - If canvas height > SCROLL_THRESHOLD: hide scrollbar and let bottom box expand
-        should_show_scrollbar = canvas_h <= SCROLL_THRESHOLD
-
-        if should_show_scrollbar:
-            self._enable_scrolling_mode(bbox)
-        else:
-            self._enable_expand_mode(canvas_h)
-
-    def _enable_scrolling_mode(self, bbox):
-        """Enable scrolling with fixed-size text boxes.
-        
-        Args:
-            bbox: Bounding box of the canvas content
-        """
-        # Show scrollbar if not visible
-        if not self.vscroll.winfo_ismapped():
-            self.vscroll.pack(side=tk.RIGHT, fill=tk.Y)
-            self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # Set scrollregion to the full content bbox so scrolling works
+        # Always set scrollregion to full content (scrollbar auto-disables if not needed)
         self.canvas.configure(scrollregion=bbox)
         
-        # Set fixed height for text widgets when scrolling is enabled
+        # Determine threshold based on firmware mode
+        base_threshold = SCROLL_THRESHOLD
+        if self.firmware_mode_var.get() == FIRMWARE_MODE_PRECOMPILED:
+            threshold = base_threshold - 100  # 100px less for precompiled mode
+        else:
+            threshold = base_threshold
+        
+        # Determine if we should use fixed or dynamic sizing
+        if canvas_h <= threshold:
+            # Small window: use fixed DEFAULT_TEXT_HEIGHT (12 lines)
+            self._set_text_widget_size(DEFAULT_TEXT_HEIGHT)
+        else:
+            # Large window: calculate dynamic size to fill available space
+            self._calculate_and_set_dynamic_size(canvas_h)
+
+    def _set_text_widget_size(self, lines: int):
+        """Set text widgets to a specific number of lines.
+        
+        Args:
+            lines: Number of lines to display
+        """
         try:
-            self.tab_parent.pack_propagate(True)
-            self.command_output_text.config(height=DEFAULT_TEXT_HEIGHT)
-            self.output_text.config(height=DEFAULT_TEXT_HEIGHT)
+            self.command_output_text.config(height=lines)
+            self.output_text.config(height=lines)
         except Exception:
             pass
 
-    def _enable_expand_mode(self, canvas_h):
-        """Enable expand mode where text boxes stretch to fill available space.
+    def _calculate_and_set_dynamic_size(self, canvas_h: int):
+        """Calculate and set dynamic text widget size based on available space.
         
         Args:
             canvas_h: Height of the canvas in pixels
         """
-        # Hide scrollbar if visible
-        if self.vscroll.winfo_ismapped():
-            try:
-                self.vscroll.pack_forget()
-            except Exception:
-                pass
-        
-        # Clamp scrollregion to canvas size to prevent accidental scrolling
-        try:
-            self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), canvas_h))
-        except Exception:
-            pass
-        
-        # Calculate dynamic text widget height
         try:
             # Ensure geometry info is up-to-date
             self.inner.update_idletasks()
             self.tab_parent.update_idletasks()
 
-            # Sum requested heights of all other children
+            # Sum heights of all widgets except the tab parent (includes visible custom controls)
             fixed_h = 0
             for c in self.inner.winfo_children():
                 if c is self.tab_parent:
                     continue
                 try:
-                    fixed_h += c.winfo_reqheight()
+                    # Only count if widget is actually visible/mapped
+                    if c.winfo_ismapped():
+                        fixed_h += c.winfo_reqheight()
                 except Exception:
                     pass
 
-            # Calculate available space with safety margin
-            margin = 8
-            avail = canvas_h - fixed_h - margin
-            if avail < 40:
-                avail = 40
-
-            # Determine line height from font metrics
+            # Get line height from font metrics
             try:
                 font = tkfont.Font(font=self.command_output_text['font'])
                 line_h = font.metrics('linespace') or 14
             except Exception:
                 line_h = 14
 
-            # Calculate available space for text widgets
-            avail_for_text = avail - self._TAB_HEADER_HEIGHT_PX - self._SAFETY_MARGIN_PX
+            # Calculate available space for tabs (with margins and tab headers)
+            margin = 8
+            tab_overhead = self._TAB_HEADER_HEIGHT_PX + self._SAFETY_MARGIN_PX
+            avail_for_text = canvas_h - fixed_h - margin - tab_overhead
 
-            # Ensure minimum of DEFAULT_TEXT_HEIGHT lines
-            if avail_for_text < (DEFAULT_TEXT_HEIGHT * line_h):
-                lines = DEFAULT_TEXT_HEIGHT
-            else:
-                lines = int(avail_for_text / line_h)
+            # Calculate lines, ensuring minimum of MIN_TEXT_HEIGHT (6 lines)
+            lines = max(MIN_TEXT_HEIGHT, int(avail_for_text / line_h))
 
             # Apply the computed line count
-            try:
-                self.tab_parent.pack_propagate(True)
-                self.command_output_text.config(height=lines)
-                self.output_text.config(height=lines)
-            except Exception:
-                pass
+            self._set_text_widget_size(lines)
 
             # Force layout recalculation
-            try:
-                self.tab_parent.update_idletasks()
-                self.inner.update_idletasks()
-            except Exception:
-                pass
+            self.tab_parent.update_idletasks()
+            self.inner.update_idletasks()
         except Exception as e:
-            # Log major errors only
-            print(f"Error in expand mode: {e}")
+            # Fallback to minimum if calculation fails
+            print(f"Error calculating text size: {e}")
+            self._set_text_widget_size(MIN_TEXT_HEIGHT)
 
     def _on_canvas_configure(self, event):
         """Handle canvas resize events."""
@@ -676,6 +814,15 @@ class ESPToolGUI:
     def _on_mousewheel(self, event):
         """Handle mouse wheel scrolling on Windows/macOS."""
         try:
+            # Determine threshold based on firmware mode
+            base_threshold = SCROLL_THRESHOLD
+            if self.firmware_mode_var.get() == FIRMWARE_MODE_PRECOMPILED:
+                threshold = base_threshold - 100
+            else:
+                threshold = base_threshold
+            # Disable scrolling when window height > threshold
+            if self.canvas.winfo_height() > threshold:
+                return
             delta = int(-1 * (event.delta / 120))
             if delta:
                 self.canvas.yview_scroll(delta, "units")
@@ -684,6 +831,15 @@ class ESPToolGUI:
 
     def _on_mousewheel_linux(self, event):
         """Handle mouse wheel scrolling on Linux."""
+        # Determine threshold based on firmware mode
+        base_threshold = SCROLL_THRESHOLD
+        if self.firmware_mode_var.get() == FIRMWARE_MODE_PRECOMPILED:
+            threshold = base_threshold - 100
+        else:
+            threshold = base_threshold
+        # Disable scrolling when window height > threshold
+        if self.canvas.winfo_height() > threshold:
+            return
         # Button-4 = up, Button-5 = down
         if event.num == 4:
             self.canvas.yview_scroll(-1, "units")
@@ -711,29 +867,49 @@ class ESPToolGUI:
         self.chip_label.grid(row=1, column=1, sticky=tk.W, pady=(8, 0))
         ttk.Button(top_frame, text="Detect Chip", command=self.detect_chip).grid(row=1, column=2, padx=6, pady=(8, 0))
 
-        fw_frame = ttk.LabelFrame(parent, text="Firmware directory", padding=8)
-        fw_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
-        ttk.Entry(fw_frame, textvariable=self.fw_dir_var, width=80).grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
-        ttk.Button(fw_frame, text="Browse...", command=self.browse_fw_dir).grid(row=0, column=1)
-        ttk.Button(fw_frame, text="Auto-map", command=self.update_file_mapping).grid(row=0, column=2, padx=(6, 0))
+        # Firmware selection frame (rower dropdown toggles between precompiled/custom)
+        fw_select_frame = ttk.LabelFrame(parent, text="Firmware Selection", padding=8)
+        fw_select_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
 
-        mapping_frame = ttk.LabelFrame(parent, text="File Mapping (double-click address to edit)", padding=8)
-        mapping_frame.pack(fill=tk.BOTH, expand=False, padx=8, pady=(8, 0))
+        profiles_row = ttk.Frame(fw_select_frame)
+        profiles_row.pack(fill=tk.X, pady=2)
+        ttk.Label(profiles_row, text="Rower:").pack(side=tk.LEFT, padx=(0, 4))
+        self.rower_combo = ttk.Combobox(profiles_row, textvariable=self.rower_var, state="readonly", width=20)
+        self.rower_combo.pack(side=tk.LEFT, padx=(0, 10))
+        self.rower_combo.bind("<<ComboboxSelected>>", self.on_rower_changed)
+        
+        ttk.Label(profiles_row, text="Board:").pack(side=tk.LEFT, padx=(0, 4))
+        self.board_combo = ttk.Combobox(profiles_row, textvariable=self.board_var, state="readonly", width=20)
+        self.board_combo.pack(side=tk.LEFT)
+
+        # Status label for profile loading - on the same line as dropdowns
+        self.profile_status_label = ttk.Label(profiles_row, text="", foreground="gray")
+        self.profile_status_label.pack(side=tk.RIGHT, padx=(10, 0))
+
+        # Custom firmware directory (visible when custom mode is active)
+        self.fw_frame = ttk.LabelFrame(parent, text="Firmware directory", padding=8)
+        ttk.Entry(self.fw_frame, textvariable=self.fw_dir_var, width=80).grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Button(self.fw_frame, text="Browse...", command=self.browse_fw_dir).grid(row=0, column=1)
+        ttk.Button(self.fw_frame, text="Auto-map", command=self.update_file_mapping).grid(row=0, column=2, padx=(6, 0))
+
+        self.mapping_frame = ttk.LabelFrame(parent, text="File Mapping (double-click address to edit)", padding=8)
         columns = ("addr", "file")
         # Limit to MAX_FILE_TREE_HEIGHT rows as there will never be more than that many files
-        self.mapping_tree = ttk.Treeview(mapping_frame, columns=columns, show="headings", height=MAX_FILE_TREE_HEIGHT)
+        self.mapping_tree = ttk.Treeview(self.mapping_frame, columns=columns, show="headings", height=MAX_FILE_TREE_HEIGHT)
         self.mapping_tree.heading("addr", text="Address")
         self.mapping_tree.heading("file", text="File path")
         self.mapping_tree.column("addr", width=120, anchor=tk.W)
         self.mapping_tree.column("file", width=620, anchor=tk.W)
         self.mapping_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.mapping_tree.bind("<Double-1>", self.on_tree_click)
-        scrollbar = ttk.Scrollbar(mapping_frame, orient=tk.VERTICAL, command=self.mapping_tree.yview)
+        scrollbar = ttk.Scrollbar(self.mapping_frame, orient=tk.VERTICAL, command=self.mapping_tree.yview)
         self.mapping_tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        progress_frame = ttk.Frame(parent, padding=8)
-        progress_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
+        # Store reference to progress frame so we can insert custom controls before it
+        self.progress_frame = ttk.Frame(parent, padding=8)
+        progress_frame = self.progress_frame
+        progress_frame.pack(fill=tk.X, padx=8, pady=(2, 0))
         self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
         self.progress_bar.pack(fill=tk.X)
         self.progress_label = ttk.Label(progress_frame, text="Ready")
@@ -742,7 +918,14 @@ class ESPToolGUI:
         btn_frame = ttk.Frame(parent, padding=8)
         btn_frame.pack(fill=tk.X, padx=8, pady=(8, 0))
         ttk.Button(btn_frame, text="Erase Flash", command=self.erase_flash).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="Flash Firmware", command=self.flash_firmware).pack(side=tk.RIGHT)
+        self.download_flash_btn = ttk.Button(
+            btn_frame, 
+            text="Download & Flash Firmware", 
+            command=self.download_and_flash_precompiled
+        )
+        self.download_flash_btn.pack(side=tk.RIGHT)
+        self.flash_custom_btn = ttk.Button(btn_frame, text="Flash Firmware", command=self.flash_firmware)
+        self.flash_custom_btn.pack(side=tk.RIGHT, padx=(0, 0))
 
         self.tab_parent = ttk.Notebook(parent)
         self.tab_parent.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 8))
@@ -753,13 +936,16 @@ class ESPToolGUI:
         ttk.Button(tools_tab, text="Chip ID", command=self.chip_id).pack(anchor=tk.W, padx=8, pady=4)
         # Store reference to command output text for dynamic sizing
         self.command_output_text = scrolledtext.ScrolledText(tools_tab, height=DEFAULT_TEXT_HEIGHT)
-        self.command_output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
+        self.command_output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(5, 8))
 
         log_tab = ttk.Frame(self.tab_parent)
         self.tab_parent.add(log_tab, text="Log")
         # Store reference to output text for dynamic sizing
         self.output_text = scrolledtext.ScrolledText(log_tab, height=DEFAULT_TEXT_HEIGHT) 
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
+        
+        # Initialize firmware selection after all UI elements are created
+        self.root.after(100, self.initialize_firmware_selection)
 
     # ---------- Logging helpers ----------
     def log_output(self, message: str):
@@ -798,6 +984,183 @@ class ESPToolGUI:
         if "100.0%" in message or "Flash complete" in message:
             self.progress_var.set(100.0)
             self.progress_label.config(text="Flash complete!")
+
+    # ---------- Firmware mode management ----------
+    def initialize_firmware_selection(self):
+        """Initialize firmware selection - fetch releases asynchronously with UI feedback."""
+        # Show loading status
+        self.profile_status_label.config(text="Loading profiles...", foreground="orange")
+        self.root.update_idletasks()
+        
+        def fetch_worker():
+            try:
+                self.log_output("Fetching GitHub release data...")
+                self.release_data, error_msg = fetch_github_release()
+                
+                if not self.release_data:
+                    if error_msg:
+                        self.root.after(0, lambda: self.profile_status_label.config(text="Loading profiles failed...", foreground="red"))
+                        self.log_output(f"WARNING: Failed to fetch release data: {error_msg}")
+                    else:
+                        self.root.after(0, lambda: self.profile_status_label.config(text="Loading profiles failed...", foreground="red"))
+                        self.log_output("WARNING: Failed to fetch release data - unknown error")
+                    self.log_output("Falling back to custom mode only")
+                    self.available_rowers = ["custom"]
+                    self.root.after(0, lambda: self.rower_combo.config(values=["Custom"]))
+                    self.rower_name_map = {"Custom": "custom"}
+                    self.root.after(0, lambda: self.rower_var.set("Custom"))
+                    self.root.after(0, self.on_rower_changed, None)
+                    return
+                
+                # Extract unique rower profiles from assets
+                rowers = set()
+                for asset in self.release_data.get("assets", []):
+                    parsed = parse_firmware_asset_name(asset["name"])
+                    if parsed:
+                        rowers.add(parsed["rower"])
+                
+                # Always add "custom" option - selecting it switches to custom mode
+                self.available_rowers = sorted(list(rowers)) + ["custom"]
+                # Format profile names for display
+                formatted_rowers = [format_profile_name(r) if r != "custom" else "Custom" for r in self.available_rowers]
+                self.root.after(0, lambda: self.rower_combo.config(values=formatted_rowers))
+                # Store mapping of formatted names to original names
+                self.rower_name_map = {formatted_rowers[i]: self.available_rowers[i] for i in range(len(self.available_rowers))}
+                
+                # Default to custom mode
+                self.root.after(0, lambda: self.rower_var.set("Custom"))
+                self.root.after(0, self.on_rower_changed, None)
+                
+                # Hide status label on success
+                self.root.after(0, lambda: self.profile_status_label.config(text=""))
+                
+                self.root.after(0, lambda: self.log_output(f"Found {len(rowers)} rower profiles in release {self.release_data.get('tag_name', 'unknown')}"))
+            except Exception as e:
+                self.root.after(0, lambda: self.profile_status_label.config(text="Loading profiles failed...", foreground="red"))
+                self.root.after(0, lambda: self.log_output(f"ERROR: Exception while fetching releases: {e}"))
+                # Fallback to custom mode only
+                self.available_rowers = ["custom"]
+                self.root.after(0, lambda: self.rower_combo.config(values=["Custom"]))
+                self.rower_name_map = {"Custom": "custom"}
+                self.root.after(0, lambda: self.rower_var.set("Custom"))
+                self.root.after(0, self.on_rower_changed, None)
+        
+        threading.Thread(target=fetch_worker, daemon=True).start()
+
+    def on_rower_changed(self, event):
+        """Update board dropdown and UI mode when rower selection changes."""
+        rower_display = self.rower_var.get()
+        # Get actual rower name from mapping
+        rower = self.rower_name_map.get(rower_display, rower_display.lower())
+        
+        if rower == "custom":
+            # Switch to custom mode - show firmware directory and file mapping before tabs
+            self.firmware_mode_var.set(FIRMWARE_MODE_CUSTOM)
+            self.board_combo["values"] = []
+            self.board_var.set("")
+            self.board_combo.config(state="disabled")
+            
+            # Show custom controls right after firmware selection and before progress
+            self.fw_frame.pack(fill=tk.X, padx=8, pady=(8, 0), before=self.progress_frame)
+            self.mapping_frame.pack(fill=tk.BOTH, expand=False, padx=8, pady=(8, 0), before=self.progress_frame)
+            
+            # Show custom flash button, hide download button
+            self.download_flash_btn.pack_forget()
+            self.flash_custom_btn.pack(side=tk.RIGHT)
+            
+            # Disable flash button if no files mapped
+            if len(self.flash_entries) == 0:
+                self.flash_custom_btn.config(state="disabled")
+            else:
+                self.flash_custom_btn.config(state="normal")
+            
+            self.log_output("Switched to custom firmware mode")
+            
+            # Force scroll calculation update after layout changes
+            self.root.after(50, self._on_inner_configure)
+        else:
+            # Switch to precompiled mode - hide custom controls, show board selection
+            self.firmware_mode_var.set(FIRMWARE_MODE_PRECOMPILED)
+            self.fw_frame.pack_forget()
+            self.mapping_frame.pack_forget()
+            self.board_combo.config(state="readonly")
+            
+            # Show download button, hide custom flash button
+            self.flash_custom_btn.pack_forget()
+            self.download_flash_btn.pack(side=tk.RIGHT)
+            
+            # Force scroll calculation update after layout changes
+            self.root.after(50, self._on_inner_configure)
+            
+            if not self.release_data:
+                self.log_output("ERROR: No release data available")
+                return
+            
+            detected_chip = self.chip_label.cget("text")
+            
+            # Filter boards by rower and chip
+            self.available_boards = get_compatible_boards(self.release_data.get("assets", []), detected_chip, rower)
+            self.board_combo["values"] = self.available_boards
+            
+            if self.available_boards:
+                self.board_var.set(self.available_boards[0])
+                self.download_flash_btn.config(state="normal")
+            else:
+                self.board_var.set("")
+                self.download_flash_btn.config(state="disabled")
+                if detected_chip != "Unknown":
+                    self.log_output(f"WARNING: No boards found for rower '{rower}' and chip '{detected_chip}'")
+            
+            self.log_output(f"Switched to precompiled mode: {rower}")
+
+    def download_and_flash_precompiled(self):
+        """Download firmware from GitHub and flash to device."""
+        rower = self.rower_var.get()
+        board = self.board_var.get()
+        detected_chip = self.chip_label.cget("text")
+        
+        if not rower or not board:
+            self.log_output("ERROR: Please select rower and board profiles")
+            return
+        
+        if detected_chip == "Unknown":
+            self.log_output("ERROR: Please detect chip first")
+            return
+        
+        if not self.release_data:
+            self.log_output("ERROR: No release data available")
+            return
+        
+        try:
+            self.log_output(f"Downloading firmware for {rower}/{board}...")
+            
+            # Find matching asset
+            asset_name = None
+            for asset in self.release_data.get("assets", []):
+                parsed = parse_firmware_asset_name(asset["name"])
+                if parsed and parsed["rower"] == rower and parsed["board"] == board and parsed["chip"] == detected_chip:
+                    asset_name = asset["name"]
+                    download_url = asset["browser_download_url"]
+                    break
+            
+            if not asset_name:
+                self.log_output(f"ERROR: No firmware found for {rower}/{board}/{detected_chip}")
+                return
+            
+            # Download and extract
+            fw_dir = download_and_extract_firmware(download_url, asset_name)
+            self.log_output(f"Downloaded firmware to {fw_dir}")
+            
+            # Update firmware directory and auto-map files
+            self.fw_dir_var.set(fw_dir)
+            self.update_file_mapping()
+            
+            # Flash firmware
+            self.log_output("Starting flash process...")
+            self.flash_firmware()
+            
+        except Exception as e:
+            self.log_output(f"ERROR: Failed to download/flash firmware: {e}")
 
     # ---------- Port & chip helpers (unchanged logic) ----------
     def refresh_ports(self):
@@ -921,6 +1284,9 @@ class ESPToolGUI:
                     self.baud_var.set(str(DEFAULT_BAUD_FAST))
             if self.fw_dir_var.get():
                 self.update_file_mapping()
+            # Update board dropdown when chip is detected (if not in custom mode)
+            if self.rower_var.get() and self.rower_var.get() != "custom":
+                self.on_rower_changed(None)
         else:
             self.chip_label.config(text="Detection failed", foreground="red")
             self.log_output("Chip detection failed")
@@ -958,6 +1324,13 @@ class ESPToolGUI:
                     addr, path = entry.split(":", 1)
                     self.mapping_tree.insert("", "end", values=(addr, path))
             self.log_output(f"Mapped {len(entries)} file(s) from: {fw_dir}")
+            
+            # Enable/disable flash button based on file count
+            if self.firmware_mode_var.get() == FIRMWARE_MODE_CUSTOM:
+                if len(entries) > 0:
+                    self.flash_custom_btn.config(state="normal")
+                else:
+                    self.flash_custom_btn.config(state="disabled")
         except Exception as e:
             self.log_output(f"Error mapping files: {e}")
             messagebox.showerror("Error", f"Failed to map files: {e}")
@@ -1010,6 +1383,13 @@ class ESPToolGUI:
                 self.log_output(f"Warning: mapped file not found: {full}")
             new_entries.append(f"{addr}:{full}")
         self.flash_entries = new_entries
+        
+        # Enable/disable flash button based on file count
+        if self.firmware_mode_var.get() == FIRMWARE_MODE_CUSTOM:
+            if len(new_entries) > 0:
+                self.flash_custom_btn.config(state="normal")
+            else:
+                self.flash_custom_btn.config(state="disabled")
 
     def flash_firmware(self):
         port = self.get_selected_port()

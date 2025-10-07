@@ -35,7 +35,10 @@ jobs:
           for env in "${env_array[@]}"; do
             echo "- ${env}"
           done
-          pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
+          for env in "${env_array[@]}"; do
+            pio run -e "${env}"
+          done
+          # pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
 
       - name: 📦 Prepare zipped firmware binaries
         run: |

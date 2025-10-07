@@ -23,7 +23,7 @@ jobs:
           python-version: '3.x'
 
       - name: 🔧 Set up PlatformIO Core
-        run: pip install -U platformio
+        run: pip install -U platformio esptool
 
       - name:  Build binaries for all rowers and board profiles
         run: |
@@ -35,7 +35,7 @@ jobs:
           for env in "${env_array[@]}"; do
             echo "- ${env}"
           done
-          for env in "${env_array[@]}"; do
+          for env in "${env_array[0]}"; do
             pio run -e "${env}"
           done
           # pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)

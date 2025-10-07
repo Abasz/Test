@@ -23,7 +23,7 @@ jobs:
           python-version: '3.x'
 
       - name: 🔧 Set up PlatformIO Core
-        run: pip install -U platformio esptool
+        run: pip install -U platformio esptool certifi
 
       - name:  Build binaries for all rowers and board profiles
         run: |
@@ -62,8 +62,9 @@ jobs:
             chip_id_safe=$(echo "${chip_id}" | sed -E 's/[^A-Za-z0-9._]//g')
 
             zipname="${{github.workspace}}/release_assets/firmware_${environmentName}_${chip_id_safe}.zip"
-            echo "Creating zip: ${zipname} (bin: ${binfile})"
-            zip -j -q "${zipname}" "${binfile}"
+            echo "Creating zip: ${zipname} (all .bin files in ${dir})"
+            # include all .bin files from this environment folder
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j -q "${zipname}" -@
           done
 
       - name: 📎 Upload firmware binaries
@@ -100,7 +101,7 @@ jobs:
       - name: 🔧 Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.x'
 
       - name: 📦 Install dependencies
         run: |

@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""ESPTool GUI - A graphical interface for flashing ESP32/ESP8266 devices.
+"""ESPTool GUI
 
-This tool provides a user-friendly GUI for common esptool operations including:
-- Flashing firmware to ESP32/ESP8266 devices
-- Erasing flash memory
-- Reading device information (MAC address, chip ID)
-- Auto-detection of device types and serial ports
+This tool provides a user-friendly GUI for common esptool operations including in assistance in flashing installation of ESP Rowing Monitor firmware.
+
+Operations supported includes:
+- Flash any compiled firmware to ESP32 devices (write-flash with auto-address mapping).
+- Erase device flash and read device information (MAC, chip id).
+- Auto-detect connected devices and probe to determine the chip variant.
+- Manage precompiled ESP Rowing Monitor firmware automatically (download from a GitHub release and auto-map extracted files to the proper flash addresses).
+- Support custom firmware directories (select a local directory containing compiled .bin files and auto-map them to the proper flash addresses).
+
+The GUI is implemented with Tkinter and integrates the esptool library by
+invoking `esptool.main()` in a redirected stdout/stderr context while
+streaming output back into the Tk widgets for live feedback.
 """
 
 from __future__ import annotations
@@ -22,13 +29,14 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 import urllib.request
+import urllib.error
 import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Set
 
 import serial.tools.list_ports as list_ports
-import esptool
+import esptool # type: ignore[import]
 import ssl
 import certifi
 
@@ -104,7 +112,7 @@ FIRMWARE_FILE_PRIORITY = [
 ]
 
 # GitHub API settings
-GITHUB_API_ENDPOINT = "https://api.github.com/repos/Abasz/Test/releases/latest"
+GITHUB_API_ENDPOINT = "https://api.github.com/repos/Abasz/ESPRowingMonitor/releases/latest"
 GITHUB_REQUEST_TIMEOUT = 10  # seconds
 
 # Firmware source modes
@@ -119,7 +127,7 @@ def list_serial_ports() -> List[Tuple[str, str, str]]:
     Returns:
         List of tuples containing (device_path, description, hardware_id).
     """
-    ports = []
+    ports: List[Tuple[str, str, str]] = []
     for p in list_ports.comports():
         ports.append((p.device, p.description or "", p.hwid or ""))
     return ports
@@ -127,22 +135,20 @@ def list_serial_ports() -> List[Tuple[str, str, str]]:
 
 def probe_port_for_chip(
     port: str, 
-    baud: int = DEFAULT_BAUD, 
-    timeout: float = DEFAULT_PROBE_TIMEOUT
+    baud: int = DEFAULT_BAUD
 ) -> Optional[str]:
     """Probe a serial port to detect the connected chip type.
     
     Args:
         port: Serial port device path
         baud: Baud rate for communication
-        timeout: Timeout in seconds for the probe operation
         
     Returns:
         Raw output from esptool chip_id command, or None if probe failed
     """
     args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip-id"]
     try:
-        rc, output = run_esptool(args)
+        _, output = run_esptool(args)
         return output if output else None
     except Exception:
         return None
@@ -196,8 +202,6 @@ def build_flash_entries_from_dir(dirpath: str, chip_hint: Optional[str] = None) 
     Raises:
         ValueError: If dirpath is invalid or directory doesn't exist
     """
-    if not isinstance(dirpath, str):
-        raise ValueError("dirpath must be a string")
     dirpath = _strip_quotes(dirpath)
     p = Path(os.path.expanduser(dirpath))
     if not p.exists() or not p.is_dir():
@@ -302,7 +306,7 @@ def parse_file_list(entries: List[str]) -> List[str]:
         out.append(path_abs)
     return out
 
-def run_esptool(args: List[str], output_callback=None) -> Tuple[int, str]:
+def run_esptool(args: List[str], output_callback: Optional[Callable[[str], None]] = None) -> Tuple[int, str]:
     """Execute esptool with given arguments and capture output.
     
     Args:
@@ -315,10 +319,58 @@ def run_esptool(args: List[str], output_callback=None) -> Tuple[int, str]:
     pretty = " ".join(f'"{a}"' if " " in a else a for a in ["esptool"] + args)
     print("Running:", pretty)
     
-    # Capture stdout and stderr
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
-    output_lines = []
+    # Custom stream class that captures output AND calls callback in real-time
+    class CallbackStream:
+        def __init__(self, callback: Optional[Callable[[str], None]] = None) -> None:
+            self.buffer = io.StringIO()
+            self.callback: Optional[Callable[[str], None]] = callback
+            self.line_buffer: str = ""
+        
+        def write(self, text: str) -> int:
+            self.buffer.write(text)
+            if self.callback:
+                self.line_buffer += text
+                while '\n' in self.line_buffer or '\r' in self.line_buffer:
+                    # Handle both \n and \r (esptool uses \r for progress updates)
+                    if '\r' in self.line_buffer and '\n' not in self.line_buffer.split('\r')[0]:
+                        # Progress line with \r but no \n yet
+                        parts = self.line_buffer.split('\r')
+                        if len(parts) > 1:
+                            for part in parts[:-1]:
+                                if part:
+                                    self.callback(part)
+                            self.line_buffer = parts[-1]
+                    else:
+                        # Regular line with \n
+                        if '\n' in self.line_buffer:
+                            line, self.line_buffer = self.line_buffer.split('\n', 1)
+                            if line:
+                                self.callback(line)
+                        else:
+                            break
+            return len(text)
+        
+        def flush(self):
+            # Ensure underlying buffer is flushed (StringIO.flush exists but is a no-op)
+            try:
+                self.buffer.flush()
+            except Exception:
+                pass
+            # If we have any partial content accumulated, deliver it to the callback now
+            if self.callback and self.line_buffer:
+                try:
+                    self.callback(self.line_buffer)
+                except Exception:
+                    pass
+                finally:
+                    self.line_buffer = ""
+        
+        def getvalue(self):
+            return self.buffer.getvalue()
+    
+    stdout_stream = CallbackStream(output_callback)
+    stderr_stream = CallbackStream(output_callback)
+    output_lines: List[str] = []
     
     try:
         # Save original sys.argv to restore later
@@ -327,34 +379,39 @@ def run_esptool(args: List[str], output_callback=None) -> Tuple[int, str]:
         # Set sys.argv as esptool expects it (with script name as first arg)
         sys.argv = ["esptool"] + args
         
-        # Redirect stdout and stderr to capture output
-        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+        # Redirect stdout and stderr to our custom streaming handler
+        with contextlib.redirect_stdout(stdout_stream), contextlib.redirect_stderr(stderr_stream):  # type: ignore[arg-type]
             try:
                 # Call esptool main function
                 esptool.main()
-                rc = 0
+                rc: int = 0
             except SystemExit as e:
-                rc = e.code if e.code is not None else 0
+                rc = int(e.code) if e.code is not None and isinstance(e.code, int) else 0
             except Exception as e:
-                stderr_buf.write(f"Runtime error: {e}\n")
+                stderr_stream.write(f"Runtime error: {e}\n")
                 rc = 2
         
         # Restore original sys.argv
         sys.argv = original_argv
         
+        # Flush any remaining buffered content
+        if output_callback:
+            if stdout_stream.line_buffer:
+                output_callback(stdout_stream.line_buffer)
+            if stderr_stream.line_buffer:
+                output_callback(stderr_stream.line_buffer)
+        
         # Combine stdout and stderr output
-        stdout_output = stdout_buf.getvalue()
-        stderr_output = stderr_buf.getvalue()
+        stdout_output = stdout_stream.getvalue()
+        stderr_output = stderr_stream.getvalue()
         combined_output = stdout_output + stderr_output
         
-        # Process output line by line for callback
+        # Collect output lines for return value
         if combined_output:
             lines = combined_output.split('\n')
             for line in lines:
-                if line.strip():  # Skip empty lines
+                if line.strip():
                     output_lines.append(line)
-                    if output_callback:
-                        output_callback(line)
         
         return rc, '\n'.join(output_lines)
         
@@ -364,7 +421,7 @@ def run_esptool(args: List[str], output_callback=None) -> Tuple[int, str]:
             output_callback(err)
         return 2, err
 
-def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) -> Tuple[Optional[str], Dict]:
+def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) -> Tuple[Optional[str], Dict[str, Any]]:
     """Automatically select the most appropriate serial port.
     
     Selection priority:
@@ -382,11 +439,11 @@ def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) ->
         metadata includes all_ports list and auto_chip if detected
     """
     ports = list_serial_ports()
-    metadata = {"all_ports": ports, "auto_chip": None}
+    metadata: Dict[str, Any] = {"all_ports": ports, "auto_chip": None}
     
     # Try preferred port first
     if preferred:
-        for dev, desc, hwid in ports:
+        for dev, _, _ in ports:
             if dev == preferred:
                 if try_probe:
                     out = probe_port_for_chip(dev)
@@ -410,7 +467,7 @@ def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) ->
 
     # Multiple ports - probe for chip detection
     if try_probe:
-        for dev, desc, hwid in ports:
+        for dev, _, _ in ports:
             out = probe_port_for_chip(dev)
             chip = detect_chip_from_output(out)
             if chip:
@@ -426,7 +483,7 @@ def auto_select_port(preferred: Optional[str] = None, try_probe: bool = True) ->
     # Default to first port
     return ports[0][0], metadata
 
-def fetch_github_release(api_url: str = GITHUB_API_ENDPOINT, max_retries: int = 3) -> tuple[Optional[Dict], Optional[str]]:
+def fetch_github_release(api_url: str = GITHUB_API_ENDPOINT, max_retries: int = 3) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Fetch latest release metadata from GitHub API with retry mechanism.
     
     Args:
@@ -518,7 +575,7 @@ def format_profile_name(profile_name: str) -> str:
     # Capitalize first letter of each word
     return ' '.join(word.capitalize() for word in with_spaces.split())
 
-def get_compatible_boards(assets: List[Dict], chip: str, rower: str) -> List[str]:
+def get_compatible_boards(assets: List[Dict[str, Any]], chip: str, rower: str) -> List[str]:
     """Get list of board profiles compatible with detected chip and selected rower.
     
     Args:
@@ -532,19 +589,28 @@ def get_compatible_boards(assets: List[Dict], chip: str, rower: str) -> List[str
     if chip == "Unknown":
         return []
     
-    boards = set()
+    boards: Set[str] = set()
     for asset in assets:
         parsed = parse_firmware_asset_name(asset.get("name", ""))
         if parsed and parsed["chip"] == chip.lower() and parsed["rower"] == rower:
             boards.add(parsed["board"])
     return sorted(list(boards))
 
-def download_and_extract_firmware(url: str, dest_dir: str) -> Optional[str]:
+def download_and_extract_firmware(
+    url: str,
+    dest_dir: str,
+    progress_callback: Callable[[int, int], None],
+    status_callback: Callable[[str], None],
+    extraction_start_callback: Callable[[], None],
+) -> Optional[str]:
     """Download firmware zip from URL and extract to directory.
     
     Args:
         url: Download URL for firmware zip
         dest_dir: Destination directory for extraction
+        progress_callback: Optional callback(bytes_downloaded, total_bytes) for download progress
+        status_callback: Optional callback(status_message) for status updates
+        extraction_start_callback: Optional callback() called when extraction begins (for indeterminate progress)
         
     Returns:
         Path to extraction directory or None if failed
@@ -553,10 +619,28 @@ def download_and_extract_firmware(url: str, dest_dir: str) -> Optional[str]:
         # Download to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
             print(f"Downloading firmware from {url}...")
+            
+            status_callback("Downloading...")
+            
             # Use certifi CA bundle for TLS verification
             ctx = ssl.create_default_context(cafile=certifi.where())
             with urllib.request.urlopen(url, timeout=30, context=ctx) as response:
-                tmp.write(response.read())
+                # Get total size from headers
+                total_size = int(response.headers.get('Content-Length', 0))
+                downloaded = 0
+                chunk_size = 8192
+                
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    tmp.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    # Report progress
+                    if total_size > 0:
+                        progress_callback(downloaded, total_size)
+            
             tmp_path = tmp.name
         
         # Extract zip
@@ -564,15 +648,25 @@ def download_and_extract_firmware(url: str, dest_dir: str) -> Optional[str]:
         os.makedirs(extract_path, exist_ok=True)
         
         print(f"Extracting firmware to {extract_path}...")
+        
+        # Signal extraction starting (switch to indeterminate mode)
+        extraction_start_callback()
+        
+        status_callback("Extracting...")
+
         with zipfile.ZipFile(tmp_path, 'r') as zf:
             zf.extractall(extract_path)
         
+        status_callback("Ready")
+
         # Clean up temp file
         os.unlink(tmp_path)
         
         return extract_path
     except Exception as e:
         print(f"Failed to download/extract firmware: {e}")
+        status_callback(f"Error: {e}")
+        
         return None
 
 # ==================== GUI APPLICATION ====================
@@ -589,7 +683,7 @@ class ESPToolGUI:
     _TAB_HEADER_HEIGHT_PX = 130  # Estimated height for tab headers
     _SAFETY_MARGIN_PX = 22  # Safety margin for scroll calculations
     
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk) -> None:
         """Initialize the ESPTool GUI application.
         
         Args:
@@ -597,6 +691,7 @@ class ESPToolGUI:
         """
         self.root = root
         self.root.title("ESPTool GUI")
+        self.root.iconbitmap(os.path.join(sys._MEIPASS, "ESPTools-GUI.ico")) # type: ignore[arg-type]
         self.root.geometry(f"{DEFAULT_WINDOW_WIDTH}x{DEFAULT_WINDOW_HEIGHT}")
 
         self.settings_file = Path.home() / SETTINGS_FILENAME
@@ -616,7 +711,7 @@ class ESPToolGUI:
         self._last_progress_line: Optional[str] = None
         
         # GitHub release state
-        self.release_data: Optional[Dict] = None
+        self.release_data: Optional[Dict[str, Any]] = None
         self.available_rowers: List[str] = []
         self.available_boards: List[str] = []
         self.firmware_mode_var = tk.StringVar(value=FIRMWARE_MODE_PRECOMPILED)
@@ -629,16 +724,14 @@ class ESPToolGUI:
         self.container = ttk.Frame(self.root)
         self.container.pack(fill=tk.BOTH, expand=True)
 
-        # Canvas and vertical scrollbar (always visible, auto-disables when not needed)
         self.canvas = tk.Canvas(self.container, highlightthickness=0)
-        self.vscroll = ttk.Scrollbar(self.container, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.vscroll = ttk.Scrollbar(self.container, orient=tk.VERTICAL, command=self.canvas.yview)  # type: ignore[arg-type]
         self.canvas.configure(yscrollcommand=self.vscroll.set)
 
         # Inner frame that will contain the full UI
         self.inner = ttk.Frame(self.canvas)
         self.inner_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
 
-        # Pack scrollbar and canvas (scrollbar always visible, auto-disables)
         self.vscroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -659,7 +752,7 @@ class ESPToolGUI:
         # Use auto_select_port to pick initial port without blocking UI for probe
         preferred = self.last_selected_port or (self.port_var.get().split(" - ", 1)[0] if self.port_var.get() else None)
         # First detect available ports and choose candidate without probing (non-blocking)
-        selected_port, meta = auto_select_port(preferred=preferred, try_probe=False)
+        selected_port, _ = auto_select_port(preferred=preferred, try_probe=False)
         ports = list_serial_ports()
         port_list = [f"{dev} - {desc}" for dev, desc, _ in ports]
         self.port_combo['values'] = port_list
@@ -669,10 +762,13 @@ class ESPToolGUI:
                 self.port_combo.set(match)
                 self.port_var.set(match)
                 # Start an asynchronous probe so we can show 'Detecting...' immediately
-                def _auto_probe_worker(dev=selected_port):
+                def _auto_probe_worker(dev: Optional[str] = selected_port) -> None:
                     try:
                         baud = int(self.baud_var.get() or DEFAULT_BAUD)
-                        out = probe_port_for_chip(dev, baud=baud)
+                        if dev:
+                            out = probe_port_for_chip(dev, baud=baud)
+                        else:
+                            out = None
                         chip = detect_chip_from_output(out)
                         self.root.after(0, self.on_chip_detected, chip, out)
                     except Exception as e:
@@ -696,8 +792,8 @@ class ESPToolGUI:
         self.root.after(3000, self.periodic_refresh)
 
     # -- scrolling helpers --
-    def _on_inner_configure(self, event=None):
-        """Handle inner frame configuration changes to manage text widget sizing.
+    def _on_inner_configure(self, _: Optional[Any] = None) -> None:
+        """Handle inner frame configuration changes to manage scrolling behavior.
         
         Text widgets have:
         - Minimum: 6 lines (MIN_TEXT_HEIGHT)
@@ -795,7 +891,7 @@ class ESPToolGUI:
             print(f"Error calculating text size: {e}")
             self._set_text_widget_size(MIN_TEXT_HEIGHT)
 
-    def _on_canvas_configure(self, event):
+    def _on_canvas_configure(self, event: Any) -> None:
         """Handle canvas resize events."""
         # Ensure inner frame width matches canvas width so widgets wrap nicely
         try:
@@ -805,13 +901,13 @@ class ESPToolGUI:
         # After resizing, update scrollregion and check scroll state
         self._on_inner_configure()
 
-    def _on_root_configure(self, event):
+    def _on_root_configure(self, event: Any) -> None:
         """Handle root window resize events."""
         # Only respond to root window resize events, not child widget events
         if event.widget == self.root:
             self.root.after_idle(self._on_inner_configure)
 
-    def _on_mousewheel(self, event):
+    def _on_mousewheel(self, event: Any) -> None:
         """Handle mouse wheel scrolling on Windows/macOS."""
         try:
             # Determine threshold based on firmware mode
@@ -829,7 +925,7 @@ class ESPToolGUI:
         except Exception:
             pass
 
-    def _on_mousewheel_linux(self, event):
+    def _on_mousewheel_linux(self, event: Any) -> None:
         """Handle mouse wheel scrolling on Linux."""
         # Determine threshold based on firmware mode
         base_threshold = SCROLL_THRESHOLD
@@ -847,7 +943,7 @@ class ESPToolGUI:
             self.canvas.yview_scroll(1, "units")
 
     # ---------- Original UI creation (same as your v3) ----------
-    def create_widgets(self, parent):
+    def create_widgets(self, parent: tk.Widget) -> None:
         top_frame = ttk.Frame(parent, padding=8)
         top_frame.pack(fill=tk.X)
 
@@ -902,8 +998,8 @@ class ESPToolGUI:
         self.mapping_tree.column("file", width=620, anchor=tk.W)
         self.mapping_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.mapping_tree.bind("<Double-1>", self.on_tree_click)
-        scrollbar = ttk.Scrollbar(self.mapping_frame, orient=tk.VERTICAL, command=self.mapping_tree.yview)
-        self.mapping_tree.configure(yscroll=scrollbar.set)
+        scrollbar = ttk.Scrollbar(self.mapping_frame, orient=tk.VERTICAL, command=self.mapping_tree.yview)  # type: ignore[arg-type]
+        self.mapping_tree.configure(yscroll=scrollbar.set)  # type: ignore[call-overload]
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Store reference to progress frame so we can insert custom controls before it
@@ -948,28 +1044,82 @@ class ESPToolGUI:
         self.root.after(100, self.initialize_firmware_selection)
 
     # ---------- Logging helpers ----------
-    def log_output(self, message: str):
+    def log_output(self, message: str) -> None:
         ts = time.strftime("%H:%M:%S")
         self.output_text.insert(tk.END, f"[{ts}] {message}\n")
         # Do not auto-scroll when adding debug/log lines; keep view where user left it.
 
-    def command_output(self, message: str):
+    def command_output(self, message: str) -> None:
         ts = time.strftime("%H:%M:%S")
         self.command_output_text.insert(tk.END, f"[{ts}] {message}\n")
         # Do not auto-scroll when adding command output; parse_and_update_progress
         # will update progress but should not force scroll.
 
-    def esptool_output(self, message: str):
-        def _insert():
-            if '\r' in message:
-                msg = message.split('\r')[-1].strip()
+    def esptool_output(self, message: str) -> None:
+        def _insert() -> None:
+            # Preserve carriage-return progress updates on a single line.
+            raw = message
+            # Remove common ANSI escape sequences (cursor movement, erase line, colors)
+            try:
+                raw = re.sub(r'\x1B\[[0-?]*[ -/]*[@-~]', '', raw)
+            except Exception:
+                pass
+            if '\r' in raw:
+                # take last segment after carriage return (esptool uses CR to update the same line)
+                msg = raw.split('\r')[-1].strip()
             else:
-                msg = message
-            self.command_output_text.insert(tk.END, f"{msg}\n")
+                msg = raw
+
+            # Determine whether this is a progress-like message
+            is_progress = False
+            try:
+                if '\r' in raw:
+                    is_progress = True
+                else:
+                    # reuse the same regex used in parse_and_update_progress
+                    if re.search(r"(\d{1,3}(?:\.\d+)?)%\s*([0-9,]+)/([0-9]+)\s*bytes", msg):
+                        is_progress = True
+            except Exception:
+                is_progress = False
+
+            try:
+                if is_progress:
+                    # Update or insert a single progress line
+                    if not getattr(self, '_last_progress_line', None):
+                        # Append a new progress line and remember its start index
+                        self.command_output_text.insert(tk.END, f"{msg}")
+                        try:
+                            self._last_progress_line = self.command_output_text.index("end-1c linestart")
+                        except Exception:
+                            self._last_progress_line = None
+                    elif self._last_progress_line:
+                        # Replace the previous progress line with the new content
+                        try:
+                            # Delete only the previous progress line (from its start to its lineend)
+                            self.command_output_text.delete(self._last_progress_line, f"{self._last_progress_line} lineend")
+                            # Insert new progress line at the same position
+                            self.command_output_text.insert(self._last_progress_line, f"{msg}")
+                            # Update stored start index to the new line
+                            self._last_progress_line = self.command_output_text.index(f"{self._last_progress_line}")
+                        except Exception:
+                            # If anything goes wrong, fallback to appending
+                            self.command_output_text.insert(tk.END, f"{msg}\n")
+                else:
+                    # Non-progress lines - append normally and clear any tracked progress line
+                    self.command_output_text.insert(tk.END, f"{msg}\n")
+                    self._last_progress_line = None
+            except Exception:
+                # Best-effort fallback
+                try:
+                    self.command_output_text.insert(tk.END, f"{msg}\n")
+                except Exception:
+                    pass
+
+            # Drive progress parsing for percent/bytes extraction
             self.parse_and_update_progress(msg)
         self.root.after(0, _insert)
 
-    def parse_and_update_progress(self, message: str):
+    def parse_and_update_progress(self, message: str) -> None:
         m = re.search(r'(\d{1,3}(?:\.\d+)?)%\s*([0-9,]+)/([0-9,]+)\s*bytes', message)
         if m:
             pct = float(m.group(1))
@@ -984,6 +1134,42 @@ class ESPToolGUI:
         if "100.0%" in message or "Flash complete" in message:
             self.progress_var.set(100.0)
             self.progress_label.config(text="Flash complete!")
+
+    def set_progress_determinate(self):
+        """Switch progress bar to determinate mode (shows percentage)."""
+        def _set():
+            self.progress_bar.config(mode='determinate')
+            self.progress_var.set(0.0)
+        self.root.after(0, _set)
+
+    def set_progress_indeterminate(self):
+        """Switch progress bar to indeterminate mode (shows activity animation)."""
+        def _set():
+            self.progress_bar.config(mode='indeterminate')
+            self.progress_bar.start(10)  # 10ms interval for animation
+        self.root.after(0, _set)
+
+    def stop_progress_indeterminate(self):
+        """Stop indeterminate progress animation."""
+        def _stop():
+            self.progress_bar.stop()
+            self.progress_bar.config(mode='determinate')
+        self.root.after(0, _stop)
+
+    def update_download_progress(self, downloaded: int, total: int):
+        """Update progress bar and label for download progress."""
+        def _update():
+            if total > 0:
+                pct = (downloaded / total) * 100
+                self.progress_var.set(pct)
+                self.progress_label.config(text=f"Downloading... {pct:.1f}% — {downloaded:,}/{total:,} bytes")
+        self.root.after(0, _update)
+
+    def update_status_message(self, message: str):
+        """Update the progress label with a status message."""
+        def _update():
+            self.progress_label.config(text=message)
+        self.root.after(0, _update)
 
     # ---------- Firmware mode management ----------
     def initialize_firmware_selection(self):
@@ -1013,7 +1199,7 @@ class ESPToolGUI:
                     return
                 
                 # Extract unique rower profiles from assets
-                rowers = set()
+                rowers: Set[str] = set()
                 for asset in self.release_data.get("assets", []):
                     parsed = parse_firmware_asset_name(asset["name"])
                     if parsed:
@@ -1034,7 +1220,8 @@ class ESPToolGUI:
                 # Hide status label on success
                 self.root.after(0, lambda: self.profile_status_label.config(text=""))
                 
-                self.root.after(0, lambda: self.log_output(f"Found {len(rowers)} rower profiles in release {self.release_data.get('tag_name', 'unknown')}"))
+                tag = self.release_data.get('tag_name', 'unknown') if self.release_data else 'unknown'
+                self.root.after(0, lambda: self.log_output(f"Found {len(rowers)} rower profiles in release {tag}"))
             except Exception as e:
                 self.root.after(0, lambda: self.profile_status_label.config(text="Loading profiles failed...", foreground="red"))
                 self.root.after(0, lambda: self.log_output(f"ERROR: Exception while fetching releases: {e}"))
@@ -1047,7 +1234,7 @@ class ESPToolGUI:
         
         threading.Thread(target=fetch_worker, daemon=True).start()
 
-    def on_rower_changed(self, event):
+    def on_rower_changed(self, _: Optional[Any] = None) -> None:
         """Update board dropdown and UI mode when rower selection changes."""
         rower_display = self.rower_var.get()
         # Get actual rower name from mapping
@@ -1113,11 +1300,14 @@ class ESPToolGUI:
             
             self.log_output(f"Switched to precompiled mode: {rower}")
 
-    def download_and_flash_precompiled(self):
+    def download_and_flash_precompiled(self) -> None:
         """Download firmware from GitHub and flash to device."""
-        rower = self.rower_var.get()
+        # Map displayed profile names back to internal keys used in asset filenames
+        rower_display = self.rower_var.get()
+        rower = self.rower_name_map.get(rower_display, (rower_display or "").lower())
         board = self.board_var.get()
         detected_chip = self.chip_label.cget("text")
+        chip_key = (detected_chip or "").lower()
         
         if not rower or not board:
             self.log_output("ERROR: Please select rower and board profiles")
@@ -1131,39 +1321,72 @@ class ESPToolGUI:
             self.log_output("ERROR: No release data available")
             return
         
-        try:
-            self.log_output(f"Downloading firmware for {rower}/{board}...")
-            
-            # Find matching asset
-            asset_name = None
-            for asset in self.release_data.get("assets", []):
-                parsed = parse_firmware_asset_name(asset["name"])
-                if parsed and parsed["rower"] == rower and parsed["board"] == board and parsed["chip"] == detected_chip:
-                    asset_name = asset["name"]
-                    download_url = asset["browser_download_url"]
-                    break
-            
-            if not asset_name:
-                self.log_output(f"ERROR: No firmware found for {rower}/{board}/{detected_chip}")
-                return
-            
-            # Download and extract
-            fw_dir = download_and_extract_firmware(download_url, asset_name)
-            self.log_output(f"Downloaded firmware to {fw_dir}")
-            
-            # Update firmware directory and auto-map files
-            self.fw_dir_var.set(fw_dir)
-            self.update_file_mapping()
-            
-            # Flash firmware
-            self.log_output("Starting flash process...")
-            self.flash_firmware()
-            
-        except Exception as e:
-            self.log_output(f"ERROR: Failed to download/flash firmware: {e}")
+        # Show user-facing rower name in logs
+        self.log_output(f"Downloading firmware for {rower_display}/{board}...")
+        
+        # Find matching asset
+        asset_name = None
+        download_url: Optional[str] = None
+        for asset in self.release_data.get("assets", []):
+            parsed = parse_firmware_asset_name(asset["name"])
+            if parsed and parsed["rower"] == rower and parsed["board"] == board and parsed["chip"] == chip_key:
+                asset_name = asset["name"]
+                download_url = asset["browser_download_url"]
+                break
+        
+        if not asset_name:
+            # Show the user-facing names in the error, but include the keys attempted for debugging
+            self.log_output(f"ERROR: No firmware found for {rower_display}/{board}/{detected_chip} (searched key: {rower}/{board}/{chip_key})")
+            return
+        
+        # Start download in background thread with progress callbacks
+        def _download_thread() -> None:
+            try:
+                # Switch to determinate mode for download
+                self.set_progress_determinate()
+                
+                # Download and extract with progress callbacks
+                # Narrow download_url for the type checker
+                assert download_url is not None
+                fw_dir = download_and_extract_firmware(
+                    download_url,
+                    tempfile.gettempdir(),
+                    progress_callback=self.update_download_progress,
+                    status_callback=self.update_status_message,
+                    extraction_start_callback=self.set_progress_indeterminate
+                )
+                
+                if not fw_dir:
+                    self.log_output("ERROR: Failed to download firmware")
+                    self.update_status_message("Download failed")
+                    self.stop_progress_indeterminate()
+                    return
+                
+                self.log_output(f"Downloaded firmware to {fw_dir}")
+                
+                # Update firmware directory and auto-map files on UI thread
+                def _complete_and_flash():
+                    self.stop_progress_indeterminate()
+                    self.fw_dir_var.set(fw_dir)
+                    self.update_file_mapping()
+                    
+                    # Flash firmware
+                    self.log_output("Starting flash process...")
+                    self.flash_firmware()
+                
+                self.root.after(0, _complete_and_flash)
+                
+            except Exception as e:
+                self.log_output(f"ERROR: Failed to download/flash firmware: {e}")
+                self.update_status_message(f"Error: {e}")
+                self.stop_progress_indeterminate()
+        
+        # Start download in background
+        download_thread = threading.Thread(target=_download_thread, daemon=True)
+        download_thread.start()
 
     # ---------- Port & chip helpers (unchanged logic) ----------
-    def refresh_ports(self):
+    def refresh_ports(self) -> None:
         ports = list_serial_ports()
         port_list = [f"{dev} - {desc}" for dev, desc, _ in ports]
         self.port_combo['values'] = port_list
@@ -1211,7 +1434,7 @@ class ESPToolGUI:
         # Otherwise, leave selection empty (no auto-selection to first port)
         self.log_output(f"{len(port_list)} serial ports found")
 
-    def periodic_refresh(self):
+    def periodic_refresh(self) -> None:
         self.refresh_ports()
         self.root.after(5000, self.periodic_refresh)
 
@@ -1221,7 +1444,71 @@ class ESPToolGUI:
             return None
         return v.split(" - ", 1)[0] if " - " in v else v
 
-    def on_port_selected(self, event=None):
+    def _close_previous_serial(self, port: Optional[str] = None) -> None:
+        """Attempt to close any lingering serial connections.
+
+        If `port` is provided, try to close only connections matching that port.
+        If `port` is None, attempt to close all serial-like objects we can find
+        (used when the app is shutting down).
+
+        This is defensive: esptool or other code paths may leave a Serial-like object open. We try a few strategies:
+        - Inspect the esptool module attributes for objects that look like serial ports (have .close and .port attributes) and close those matching the previous port.
+        - Inspect globals for pyserial Serial instances and close those matching the port.
+        - Log actions for visibility.
+        """
+        prev = port or self.last_selected_port
+        # If no specific port provided and none recorded, we'll try to close everything
+        prev_dev = prev.split(" - ", 1)[0] if prev and " - " in prev else prev
+        # Try closing objects attached to the esptool module
+        try:
+            for name in dir(esptool):
+                try:
+                    attr = getattr(esptool, name)
+                except Exception:
+                    continue
+                if not hasattr(attr, "close") or not hasattr(attr, "port"):
+                    continue
+                try:
+                    port_attr = getattr(attr, "port", None)
+                    if not prev_dev or (port_attr and str(port_attr) == str(prev_dev)):
+                        try:
+                            attr.close()
+                            self.log_output(f"Closed serial port on esptool.{name} ({prev_dev})")
+                        except Exception as e:
+                            self.log_output(f"Warning: failed to close esptool.{name}: {e}")
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Try closing any pyserial Serial objects found in global variables
+        try:
+            import serial as _serial_mod
+            SerialType = getattr(_serial_mod, 'Serial', None)
+            if SerialType:
+                for gname, gval in list(globals().items()):
+                    try:
+                        if isinstance(gval, SerialType):
+                            port_attr = getattr(gval, 'port', None)
+                            if not prev_dev or (port_attr and str(port_attr) == str(prev_dev)):
+                                try:
+                                    gval.close()
+                                    self.log_output(f"Closed global Serial object '{gname}' for {prev_dev}")
+                                except Exception as e:
+                                    self.log_output(f"Warning: failed to close global Serial '{gname}': {e}")
+                    except Exception:
+                        continue
+        except Exception:
+            # If pyserial is not available or something else fails, ignore silently
+            pass
+
+    def on_port_selected(self, _: Optional[Any] = None) -> None:
+        # Close previous connection (if any) before switching to new port
+        try:
+            self._close_previous_serial()
+        except Exception:
+            pass
+
         selected = self.get_selected_port()
         if selected:
             self.last_selected_port = selected
@@ -1241,17 +1528,19 @@ class ESPToolGUI:
             except Exception:
                 pass
         self.save_settings()
-        def worker():
-            try:
-                baud = int(self.baud_var.get() or DEFAULT_BAUD)
-                out = probe_port_for_chip(selected, baud=baud)
-                chip = detect_chip_from_output(out)
-                self.root.after(0, self.on_chip_detected, chip, out)
-            except Exception as e:
-                self.root.after(0, self.on_chip_detect_error, str(e))
-        threading.Thread(target=worker, daemon=True).start()
+        if selected:
+            def worker() -> None:
+                try:
+                    baud = int(self.baud_var.get() or DEFAULT_BAUD)
+                    if selected:
+                        out = probe_port_for_chip(selected, baud=baud)
+                        chip = detect_chip_from_output(out)
+                        self.root.after(0, self.on_chip_detected, chip, out)
+                except Exception as e:
+                    self.root.after(0, self.on_chip_detect_error, str(e))
+            threading.Thread(target=worker, daemon=True).start()
 
-    def detect_chip(self):
+    def detect_chip(self) -> None:
         """Probe the currently selected port for chip identification in a worker thread."""
         port = self.get_selected_port()
         if not port:
@@ -1260,7 +1549,7 @@ class ESPToolGUI:
         # Provide immediate UI feedback
         self.chip_label.config(text="Detecting...", foreground="orange")
 
-        def worker():
+        def worker() -> None:
             try:
                 baud = int(self.baud_var.get() or DEFAULT_BAUD)
                 out = probe_port_for_chip(port, baud=baud)
@@ -1271,7 +1560,7 @@ class ESPToolGUI:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def on_chip_detected(self, chip: Optional[str], raw_output: Optional[str]):
+    def on_chip_detected(self, chip: Optional[str], raw_output: Optional[str]) -> None:
         if chip:
             self.detected_chip = chip
             self.chip_label.config(text=chip.upper(), foreground="green")
@@ -1294,19 +1583,19 @@ class ESPToolGUI:
                 excerpt = raw_output if len(raw_output) < 1000 else raw_output[:1000] + "..."
                 self.log_output(excerpt)
 
-    def on_chip_detect_error(self, err: str):
+    def on_chip_detect_error(self, err: str) -> None:
         self.chip_label.config(text="Error", foreground="red")
         self.log_output(f"Chip detection error: {err}")
 
     # ---------- File mapping, flashing and other functions unchanged ----------
-    def browse_fw_dir(self):
+    def browse_fw_dir(self) -> None:
         d = filedialog.askdirectory(title="Select firmware directory")
         if d:
             self.fw_dir_var.set(d)
             self.update_file_mapping()
             self.save_settings()
 
-    def update_file_mapping(self):
+    def update_file_mapping(self) -> None:
         fw_dir = self.fw_dir_var.get()
         for it in self.mapping_tree.get_children():
             self.mapping_tree.delete(it)
@@ -1324,7 +1613,7 @@ class ESPToolGUI:
                     addr, path = entry.split(":", 1)
                     self.mapping_tree.insert("", "end", values=(addr, path))
             self.log_output(f"Mapped {len(entries)} file(s) from: {fw_dir}")
-            
+
             # Enable/disable flash button based on file count
             if self.firmware_mode_var.get() == FIRMWARE_MODE_CUSTOM:
                 if len(entries) > 0:
@@ -1335,7 +1624,7 @@ class ESPToolGUI:
             self.log_output(f"Error mapping files: {e}")
             messagebox.showerror("Error", f"Failed to map files: {e}")
 
-    def on_tree_click(self, event):
+    def on_tree_click(self, event: Any) -> None:
         region = self.mapping_tree.identify_region(event.x, event.y)
         if region != "cell":
             return
@@ -1356,7 +1645,7 @@ class ESPToolGUI:
         entry.insert(0, cur_addr)
         entry.place(x=x, y=y, width=width, height=height)
         entry.focus_set()
-        def finish(event=None):
+        def finish(_: Optional[Any] = None) -> None:
             new_addr = entry.get().strip()
             if not (new_addr.startswith("0x") or new_addr.isdigit()):
                 messagebox.showerror("Invalid address", "Address must be hex (0x...) or decimal")
@@ -1370,7 +1659,7 @@ class ESPToolGUI:
         entry.bind("<FocusOut>", finish)
         entry.bind("<Escape>", lambda e: entry.destroy())
 
-    def update_flash_entries_from_tree(self):
+    def update_flash_entries_from_tree(self) -> None:
         fw_dir = self.fw_dir_var.get()
         new_entries: List[str] = []
         for it in self.mapping_tree.get_children():
@@ -1391,7 +1680,7 @@ class ESPToolGUI:
             else:
                 self.flash_custom_btn.config(state="disabled")
 
-    def flash_firmware(self):
+    def flash_firmware(self) -> None:
         port = self.get_selected_port()
         if not port:
             messagebox.showerror("Error", "Please select a serial port first")
@@ -1401,7 +1690,7 @@ class ESPToolGUI:
             return
         if not messagebox.askyesno("Confirm", f"Flash {len(self.flash_entries)} file(s) to {port}?"):
             return
-        def worker():
+        def worker() -> None:
             try:
                 baud = int(self.baud_var.get() or DEFAULT_BAUD)
                 flash_args = parse_file_list(self.flash_entries)
@@ -1413,7 +1702,7 @@ class ESPToolGUI:
                 args += flash_args
                 preview = " ".join(f'"{a}"' if " " in a else a for a in ["esptool"] + args)
                 self.root.after(0, self.command_output, f"Running: {preview}")
-                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                rc, _ = run_esptool(args, output_callback=self.esptool_output)
                 if rc == 0:
                     self.root.after(0, self.command_output, "Flash finished successfully")
                     self.root.after(0, messagebox.showinfo, "Success", "Flash completed")
@@ -1426,21 +1715,21 @@ class ESPToolGUI:
         self.progress_label.config(text="Starting flash...")
         threading.Thread(target=worker, daemon=True).start()
 
-    def erase_flash(self):
+    def erase_flash(self) -> None:
         port = self.get_selected_port()
         if not port:
             messagebox.showerror("Error", "Please select a serial port first")
             return
         if not messagebox.askyesno("Confirm erase", f"Erase entire flash on {port}?"):
             return
-        def start_indeterminate():
+        def start_indeterminate() -> None:
             self.progress_bar.config(mode='indeterminate')
             try:
                 self.progress_bar.start(10)
             except Exception:
                 pass
             self.progress_label.config(text="Erasing flash...")
-        def stop_indeterminate():
+        def stop_indeterminate() -> None:
             try:
                 self.progress_bar.stop()
             except Exception:
@@ -1449,12 +1738,12 @@ class ESPToolGUI:
             self.progress_var.set(0.0)
             self.progress_label.config(text="Ready")
         start_indeterminate()
-        def worker():
+        def worker() -> None:
             try:
                 baud = int(self.baud_var.get() or DEFAULT_BAUD)
                 args = ["--port", port, "--baud", str(baud), "erase-flash"]
                 self.root.after(0, self.command_output, f"Running: esptool {' '.join(args)}")
-                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                rc, _ = run_esptool(args, output_callback=self.esptool_output)
                 self.root.after(0, stop_indeterminate)
                 if rc == 0:
                     self.root.after(0, self.command_output, "Erase completed")
@@ -1467,16 +1756,16 @@ class ESPToolGUI:
                 self.root.after(0, self.command_output, f"Erase error: {e}")
         threading.Thread(target=worker, daemon=True).start()
 
-    def read_mac(self):
+    def read_mac(self) -> None:
         port = self.get_selected_port()
         if not port:
             messagebox.showerror("Error", "Please select a serial port first")
             return
-        def worker():
+        def worker() -> None:
             try:
                 baud = int(self.baud_var.get() or DEFAULT_BAUD)
                 args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "read-mac"]
-                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                rc, _ = run_esptool(args, output_callback=self.esptool_output)
                 if rc == 0:
                     self.root.after(0, self.command_output, "Read MAC finished")
                 else:
@@ -1485,16 +1774,16 @@ class ESPToolGUI:
                 self.root.after(0, self.command_output, f"Read MAC error: {e}")
         threading.Thread(target=worker, daemon=True).start()
 
-    def chip_id(self):
+    def chip_id(self) -> None:
         port = self.get_selected_port()
         if not port:
             messagebox.showerror("Error", "Please select a serial port first")
             return
-        def worker():
+        def worker() -> None:
             try:
                 baud = int(self.baud_var.get() or DEFAULT_BAUD)
                 args = ["--port", port, "--baud", str(baud), "--after", "no-reset", "chip-id"]
-                rc, out = run_esptool(args, output_callback=self.esptool_output)
+                rc, _ = run_esptool(args, output_callback=self.esptool_output)
                 if rc == 0:
                     self.root.after(0, self.command_output, "chip-id finished")
                 else:
@@ -1503,8 +1792,8 @@ class ESPToolGUI:
                 self.root.after(0, self.command_output, f"chip-id error: {e}")
         threading.Thread(target=worker, daemon=True).start()
 
-    def save_settings(self):
-        settings = {
+    def save_settings(self) -> None:
+        settings: Dict[str, Any] = {
             "port": self.port_var.get(),
             "baud": self.baud_var.get(),
             "fw_dir": self.fw_dir_var.get(),
@@ -1518,7 +1807,7 @@ class ESPToolGUI:
         except Exception as e:
             self.log_output(f"Failed to save settings: {e}")
 
-    def load_settings(self):
+    def load_settings(self) -> None:
         if not self.settings_file.exists():
             return
         try:
@@ -1540,11 +1829,15 @@ class ESPToolGUI:
         except Exception as e:
             self.log_output(f"Failed to load settings: {e}")
 
-    def on_closing(self):
+    def on_closing(self) -> None:
+        try:
+            self._close_previous_serial()
+        except Exception:
+            pass
         self.save_settings()
         self.root.destroy()
 
-def main():
+def main() -> None:
     root = tk.Tk()
     app = ESPToolGUI(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)

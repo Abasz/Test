@@ -13,18 +13,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux
-            artifact_name: esptool-gui
-            asset_name: esptool-gui-linux-x64
+          # - os: ubuntu-latest
+          #   platform: linux
+          #   artifact_name: esptool-gui
+          #   asset_name: esptool-gui-linux-x64
           - os: windows-latest
             platform: windows
             artifact_name: esptool-gui.exe
             asset_name: esptool-gui-windows-x64.exe
-          - os: macos-latest
-            platform: macos
-            artifact_name: esptool-gui
-            asset_name: esptool-gui-macos-x64
+          # - os: macos-latest
+          #   platform: macos
+          #   artifact_name: esptool-gui
+          #   asset_name: esptool-gui-macos-x64
 
     steps:
       - name: 📥 Checkout repository

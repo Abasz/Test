@@ -44,8 +44,8 @@ jobs:
         working-directory: tools
         run: |
           ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n')
-          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json$:./esptool/targets/stub_flasher/1/"
-          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json$:./esptool/targets/stub_flasher/2/"
+          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"
+          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json:./esptool/targets/stub_flasher/2/"
 
           pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" \
             --icon ESPTools-GUI.ico \
@@ -68,8 +68,8 @@ jobs:
         shell: pwsh
         run: |
          $ESPTOOL_LOCATION = $(pip show esptool | Select-String '^Location: ').Substring(10).Trim()
-          $ESPTOOL_TARGETS_1 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\1\*.json$;./esptool/targets/stub_flasher/1/"
-          $ESPTOOL_TARGETS_2 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\2\*.json$;./esptool/targets/stub_flasher/2/"
+          $ESPTOOL_TARGETS_1 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\1\*.json;./esptool/targets/stub_flasher/1/"
+          $ESPTOOL_TARGETS_2 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\2\*.json;./esptool/targets/stub_flasher/2/"
 
           pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" `
             --icon ESPTools-GUI.ico `
@@ -91,8 +91,8 @@ jobs:
         run: |
           # On macOS create an onedir .app bundle instead of --onefile
           ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n') || true
-          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json$:./esptool/targets/stub_flasher/1/"
-          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json$:./esptool/targets/stub_flasher/2/"
+          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"
+          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json:./esptool/targets/stub_flasher/2/"
 
           pyinstaller --windowed --onedir --name "${{ matrix.artifact_name }}" \
             --icon ESPTools-GUI.ico \

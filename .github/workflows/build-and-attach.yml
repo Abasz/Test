@@ -67,7 +67,7 @@ jobs:
         working-directory: tools
         shell: pwsh
         run: |
-         $ESPTOOL_LOCATION = $(pip show esptool | Select-String '^Location: ').Substring(10).Trim()
+         $ESPTOOL_LOCATION = $(pip show esptool | Select-String 'Location: ').Substring(10).Trim()
           $ESPTOOL_TARGETS_1 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\1\*.json;./esptool/targets/stub_flasher/1/"
           $ESPTOOL_TARGETS_2 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\2\*.json;./esptool/targets/stub_flasher/2/"
 

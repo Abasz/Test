@@ -89,6 +89,7 @@ jobs:
         if: runner.os == 'macOS'
         working-directory: tools
         run: |
+          pip install pillow
           # On macOS create an onedir .app bundle instead of --onefile
           ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n') || true
           ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"

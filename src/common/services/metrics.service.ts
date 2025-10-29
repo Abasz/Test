@@ -57,11 +57,17 @@ export class MetricsService {
         private heartRateService: HeartRateService,
         private destroyRef: DestroyRef,
     ) {
+            console.log("METRICS SERVICE constructor start");
+
         this.allMetrics$ = this.setupMetricStream$().pipe(shareReplay({ bufferSize: 1, refCount: true }));
+        console.log("METRICS SERVICE allMetrics$ setup complete");
         this.heartRateData$ = this.heartRateService.streamHeartRate$();
         this.hrConnectionStatus$ = this.heartRateService.connectionStatus$();
 
+            console.log("METRICS SERVICE setup logging start");
+
         this.setupLogging();
+            console.log("METRICS SERVICE setup logging complete");
 
         this.ergConnectionService
             .connectionStatus$()
@@ -78,8 +84,12 @@ export class MetricsService {
             });
 
         if (isSecureContext === true && navigator.bluetooth !== undefined) {
+            console.log("Attempting to reconnect to previously connected ergometer, METRICS SERVICE");
             this.ergConnectionService.reconnect();
         }
+
+            console.log("METRICS SERVICE constructor complete");
+
     }
 
     getActivityStartTime(): Date {

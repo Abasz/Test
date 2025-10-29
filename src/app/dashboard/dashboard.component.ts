@@ -60,6 +60,7 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
         private ergConnectionService: ErgConnectionService,
         private utils: UtilsService,
     ) {
+        console.log("DASHBOARD COMPONENT constructor");
         this.elapseTime = toSignal(
             this.ergConnectionService.connectionStatus$().pipe(
                 filter(
@@ -92,10 +93,13 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
             ),
             { initialValue: 0 },
         );
+        console.log("DASHBOARD COMPONENT constructed");
     }
 
     async ngAfterViewInit(): Promise<void> {
+        console.log("DASHBOARD COMPONENT ngAfterViewInit");
         this.utils.enableWakeLock();
+        console.log("DASHBOARD COMPONENT ngAfterViewInit complete");
     }
 
     ngOnDestroy(): void {

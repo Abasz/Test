@@ -1,10 +1,11 @@
 import { MediaMatcher } from "@angular/cdk/layout";
 import { HTTP_INTERCEPTORS, provideHttpClient } from "@angular/common/http";
-import { DestroyRef, importProvidersFrom, isDevMode, provideZonelessChangeDetection } from "@angular/core";
+import { DestroyRef, provideZonelessChangeDetection } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
-import { ServiceWorkerModule } from "@angular/service-worker";
+import { SwUpdate } from "@angular/service-worker";
+import { EMPTY } from "rxjs";
 
 import { AppComponent } from "./app/app.component";
 import { DashboardComponent } from "./app/dashboard/dashboard.component";
@@ -28,14 +29,15 @@ bootstrapApplication(AppComponent, {
         SpinnerOverlay,
         // workaround to override Angular Material's no animation in case of reduced motion preference
         { provide: MediaMatcher, useClass: CustomMediaMatcher },
-        importProvidersFrom(
-            ServiceWorkerModule.register("ngsw-worker.js", {
-                 enabled: !isDevMode() || !navigator.serviceWorker || !navigator.userAgent.includes("iP"),
-                // register the ServiceWorker as soon as the application is stable
-                // or after 10 seconds (whichever comes first).
-                registrationStrategy: "registerWhenStable:10000",
-            }),
-        ),
+        { provide: SwUpdate, useValue: { versionUpdates: EMPTY, checkForUpdate: Promise.resolve() } },
+        // importProvidersFrom(
+        //     ServiceWorkerModule.register("ngsw-worker.js", {
+        //         enabled: !isDevMode() || !navigator.serviceWorker || !navigator.userAgent.includes("iP"),
+        //         // register the ServiceWorker as soon as the application is stable
+        //         // or after 10 seconds (whichever comes first).
+        //         registrationStrategy: "registerWhenStable:10000",
+        //     }),
+        // ),
         { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
         {
             provide: AntHeartRateService,

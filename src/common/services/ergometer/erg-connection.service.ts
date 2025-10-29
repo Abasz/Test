@@ -349,11 +349,11 @@ export class ErgConnectionService extends ErgConnections {
         this.snackBar.open("Ergometer Monitor disconnected", "Dismiss");
     };
 
-    private reconnectHandler: (event: BluetoothAdvertisingEvent) => void = (
-        event: BluetoothAdvertisingEvent,
-    ): void => {
-        this.cancellationToken.abort();
+    // private reconnectHandler: (event: BluetoothAdvertisingEvent) => void = (
+    //     event: BluetoothAdvertisingEvent,
+    // ): void => {
+    //     this.cancellationToken.abort();
 
-        this.connect(event.device);
-    };
+    //     this.connect(event.device);
+    // };
 }

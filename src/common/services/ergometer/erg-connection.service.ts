@@ -1,6 +1,6 @@
 import { Injectable } from "@angular/core";
 import { MatSnackBar } from "@angular/material/snack-bar";
-import { filter, fromEvent, Observable, skip, startWith, take, takeUntil } from "rxjs";
+import { fromEvent, Observable, take } from "rxjs";
 
 import {
     BATTERY_LEVEL_CHARACTERISTIC,
@@ -242,7 +242,13 @@ export class ErgConnectionService extends ErgConnections {
             });
 
             await this.connect(device);
-        } catch {
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                !error.message.includes("User cancelled the requestDevice() chooser.")
+            ) {
+                console.error("Error during device discovery:", error);
+            }
             await this.reconnect();
         }
     }

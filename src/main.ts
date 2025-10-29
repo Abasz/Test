@@ -29,7 +29,10 @@ bootstrapApplication(AppComponent, {
         SpinnerOverlay,
         // workaround to override Angular Material's no animation in case of reduced motion preference
         { provide: MediaMatcher, useClass: CustomMediaMatcher },
-        { provide: SwUpdate, useValue: { versionUpdates: EMPTY, checkForUpdate: Promise.resolve() } },
+        {
+            provide: SwUpdate,
+            useValue: { versionUpdates: EMPTY, checkForUpdate: (): Promise<void> => Promise.resolve() },
+        },
         // importProvidersFrom(
         //     ServiceWorkerModule.register("ngsw-worker.js", {
         //         enabled: !isDevMode() || !navigator.serviceWorker || !navigator.userAgent.includes("iP"),

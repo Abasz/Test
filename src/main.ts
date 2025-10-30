@@ -80,9 +80,13 @@ bootstrapApplication(AppComponent, {
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");
     const advice = document.getElementById("global-error-advice");
+
+    console.log(overlay, msg, advice);
     if (overlay && msg && advice) {
         overlay.classList.add("active");
         msg.textContent = err instanceof Error ? err.message : String(err);
+        console.log(msg.textContent);
+        console.log(match?.groups);
         if (match?.groups?.ios || (match?.groups?.ipadmac && "ontouchend" in window)) {
             advice.innerHTML = `<p><strong>Browser compatibility:</strong></p>
                 <p>You are using iOS (${match?.groups?.browser ?? "Unknown"}). Web Bluetooth is <b>not supported</b> in any browser on iOS due to Apple platform restrictions. Please use a supported browser on Android, Windows, Linux, or macOS.</p>`;

@@ -1,10 +1,10 @@
 import { MediaMatcher } from "@angular/cdk/layout";
 import { HTTP_INTERCEPTORS, provideHttpClient } from "@angular/common/http";
-import { DestroyRef, provideZonelessChangeDetection } from "@angular/core";
+import { DestroyRef, importProvidersFrom, isDevMode, provideZonelessChangeDetection } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
-import { SwUpdate } from "@angular/service-worker";
+import { ServiceWorkerModule, SwUpdate } from "@angular/service-worker";
 import { EMPTY } from "rxjs";
 
 import { AppComponent } from "./app/app.component";
@@ -43,14 +43,14 @@ bootstrapApplication(AppComponent, {
                 isEnabled: false,
             },
         },
-        // importProvidersFrom(
-        //     ServiceWorkerModule.register("ngsw-worker.js", {
-        //         enabled: !isDevMode() || !navigator.serviceWorker || !navigator.userAgent.includes("iP"),
-        //         // register the ServiceWorker as soon as the application is stable
-        //         // or after 10 seconds (whichever comes first).
-        //         registrationStrategy: "registerWhenStable:10000",
-        //     }),
-        // ),
+        importProvidersFrom(
+            ServiceWorkerModule.register("ngsw-worker.js", {
+                enabled: !isDevMode(),
+                // register the ServiceWorker as soon as the application is stable
+                // or after 10 seconds (whichever comes first).
+                registrationStrategy: "registerWhenStable:10000",
+            }),
+        ),
         { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
         {
             provide: AntHeartRateService,
@@ -96,6 +96,8 @@ bootstrapApplication(AppComponent, {
         }
     }
 
-    console.error("Angular bootstrap failed:", err instanceof Error ? err.message : String(err));
-    console.error("Angular bootstrap failed:", err instanceof Error ? err.stack : String(err));
+    console.error(
+        "Angular bootstrap failed:",
+        err instanceof Error ? `${err.message}\n${err.stack}` : String(err),
+    );
 });

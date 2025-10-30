@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, isDevMode, OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatIconRegistry } from "@angular/material/icon";
 import { MatSnackBar } from "@angular/material/snack-bar";
@@ -45,7 +45,7 @@ export class AppComponent implements OnInit {
                 }
             });
 
-        if (!isDevMode()) {
+        if (this.swUpdate.isEnabled) {
             this.swUpdate.versionUpdates
                 .pipe(
                     filter((evt: VersionEvent): evt is VersionReadyEvent => evt.type === "VERSION_READY"),
@@ -69,7 +69,7 @@ export class AppComponent implements OnInit {
     }
 
     async ngOnInit(): Promise<void> {
-        if (!isDevMode()) {
+        if (this.swUpdate.isEnabled) {
             try {
                 await this.swUpdate.checkForUpdate();
             } catch (err) {

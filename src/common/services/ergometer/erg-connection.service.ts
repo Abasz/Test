@@ -43,6 +43,12 @@ export class ErgConnectionService extends ErgConnections {
         private snackBar: MatSnackBar,
     ) {
         super();
+
+        if (isSecureContext !== true || navigator.bluetooth === undefined) {
+            this.snackBar.open("Bluetooth API is not available", "Dismiss", {
+                duration: undefined,
+            });
+        }
     }
 
     async connectToBattery(

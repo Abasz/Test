@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, isDevMode } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, isDevMode, OnInit } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatIconRegistry } from "@angular/material/icon";
 import { MatSnackBar } from "@angular/material/snack-bar";
@@ -20,7 +20,7 @@ import { DashboardComponent } from "./dashboard/dashboard.component";
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [DashboardComponent],
 })
-export class AppComponent implements AfterViewInit {
+export class AppComponent implements OnInit {
     constructor(
         private destroyRef: DestroyRef,
         private matIconReg: MatIconRegistry,
@@ -68,7 +68,7 @@ export class AppComponent implements AfterViewInit {
         }
     }
 
-    async ngAfterViewInit(): Promise<void> {
+    async ngOnInit(): Promise<void> {
         if (!isDevMode()) {
             try {
                 await this.swUpdate.checkForUpdate();

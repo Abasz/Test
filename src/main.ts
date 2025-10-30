@@ -3,7 +3,7 @@ import { HTTP_INTERCEPTORS, provideHttpClient } from "@angular/common/http";
 import { DestroyRef, provideZonelessChangeDetection } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
-import { provideRouter } from "@angular/router";
+import { provideRouter, withDebugTracing } from "@angular/router";
 import { SwUpdate } from "@angular/service-worker";
 import { EMPTY } from "rxjs";
 
@@ -12,20 +12,27 @@ import { DashboardComponent } from "./app/dashboard/dashboard.component";
 import { SpinnerOverlay } from "./common/overlay/spinner-overlay.service";
 import { ErrorInterceptor } from "./common/services/error.interceptor.service";
 import { AntHeartRateService } from "./common/services/heart-rate/ant-heart-rate.service";
+import { ConsoleDomLogger } from "./common/utils/console-dom-logger";
 import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
+
+// initialize console DOM logger for development debugging
+ConsoleDomLogger.getInstance().initialize();
 
 bootstrapApplication(AppComponent, {
     providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
-        provideRouter([
-            {
-                path: "",
-                loadComponent: async (): Promise<typeof DashboardComponent> =>
-                    (await import("./app/dashboard/dashboard.component")).DashboardComponent,
-            },
-            { path: "**", redirectTo: "" },
-        ]),
+        provideRouter(
+            [
+                {
+                    path: "",
+                    loadComponent: async (): Promise<typeof DashboardComponent> =>
+                        (await import("./app/dashboard/dashboard.component")).DashboardComponent,
+                },
+                { path: "**", redirectTo: "" },
+            ],
+            withDebugTracing(),
+        ),
         SpinnerOverlay,
         // workaround to override Angular Material's no animation in case of reduced motion preference
         { provide: MediaMatcher, useClass: CustomMediaMatcher },

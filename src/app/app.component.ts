@@ -114,6 +114,8 @@ export class AppComponent implements AfterViewInit {
 
             console.error("Error making storage persistent:", error);
         }
+
+        console.log("app started");
     }
 
     private showFirmwareUpdateNotification(): void {

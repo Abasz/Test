@@ -26,8 +26,7 @@ bootstrapApplication(AppComponent, {
             [
                 {
                     path: "",
-                    loadComponent: async (): Promise<typeof DashboardComponent> =>
-                        (await import("./app/dashboard/dashboard.component")).DashboardComponent,
+                    component: DashboardComponent,
                 },
                 { path: "**", redirectTo: "" },
             ],

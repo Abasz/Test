@@ -5,7 +5,7 @@
         "ng": "ng",
         "start": "ng serve",
         "build": "npm run build:prepare && ng build",
-        "dev": "npm run build:prepare && ng build && npx http-server -p 4201 dist/esp-rowing-monitor-client/browser",
+        "dev": "npx http-server -p 4201 dist/esp-rowing-monitor-client/browser",
         "serve": "ng build && npx http-server -p 4201 dist/esp-rowing-monitor-client/browser",
         "build:prepare": "npm run build:tools && node out-tsc/tools/auto-version.js && node out-tsc/tools/fetch-profiles.js",
         "build:tools": "tsc -p tools/tsconfig.json",

@@ -86,7 +86,7 @@ bootstrapApplication(AppComponent, {
     const advice = document.getElementById("global-error-advice");
     if (overlay && msg && advice) {
         overlay.classList.add("active");
-        msg.textContent = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+        msg.textContent = err instanceof Error ? err.message : String(err);
         if (isIOS) {
             advice.innerHTML = `<p><strong>Browser compatibility:</strong></p>
                 <p>You are using iOS (${browser ?? "Unknown"}). Web Bluetooth is <b>not supported</b> in any browser on iOS due to Apple platform restrictions. Please use a supported browser on Android, Windows, Linux, or macOS.</p>`;

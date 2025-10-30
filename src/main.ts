@@ -111,5 +111,5 @@ bootstrapApplication(AppComponent, {
         handleError();
     }
 
-    console.error("Angular bootstrap failed:", err);
+    console.error("Angular bootstrap failed:", err instanceof Error ? err.message : String(err));
 });

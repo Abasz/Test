@@ -150,6 +150,10 @@ export class ConsoleDomLogger {
         const messageSpan = document.createElement("span");
         messageSpan.textContent = args
             .map((arg: unknown): string => {
+                if (arg instanceof Error) {
+                    return `${arg.message}\n${arg.stack}`;
+                }
+
                 if (typeof arg === "object" && arg !== null) {
                     try {
                         return JSON.stringify(arg, null, 2);

@@ -1,6 +1,6 @@
 import { MediaMatcher } from "@angular/cdk/layout";
 import { HTTP_INTERCEPTORS, provideHttpClient } from "@angular/common/http";
-import { DestroyRef, provideZonelessChangeDetection } from "@angular/core";
+import { DestroyRef } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { SwUpdate } from "@angular/service-worker";
@@ -18,7 +18,7 @@ ConsoleDomLogger.getInstance().initialize();
 
 bootstrapApplication(AppComponent, {
     providers: [
-        provideZonelessChangeDetection(),
+        // provideZonelessChangeDetection(),
         provideHttpClient(),
         // provideRouter(
         //     [

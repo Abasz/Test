@@ -55,7 +55,7 @@ bootstrapApplication(AppComponent, {
         {
             provide: AntHeartRateService,
             useFactory: (snack: MatSnackBar, destroyRef: DestroyRef): AntHeartRateService => {
-                if (isSecureContext === true /*  && "usb" in navigator */) {
+                if (isSecureContext === true && "usb" in navigator) {
                     return new AntHeartRateService(snack, destroyRef);
                 }
 
@@ -80,6 +80,8 @@ bootstrapApplication(AppComponent, {
     const match = navigator.userAgent.match(
         /(?<ios>iPad|iPhone|iPod)|(?<ipadmac>Macintosh).*?(?=\))(?=.*?Mobile)|(?<browser>CriOS|Chrome|Safari|Firefox|Edg)/,
     );
+
+    console.log("User agent match:", navigator.userAgent);
 
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");

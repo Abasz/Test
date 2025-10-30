@@ -154,7 +154,7 @@ export class ConsoleDomLogger {
                     try {
                         return JSON.stringify(arg, null, 2);
                     } catch {
-                        return `[Object: ${Object.prototype.toString.call(arg)}]`;
+                        return String(arg);
                     }
                 }
 

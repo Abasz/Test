@@ -3,12 +3,10 @@ import { HTTP_INTERCEPTORS, provideHttpClient } from "@angular/common/http";
 import { DestroyRef, provideZonelessChangeDetection } from "@angular/core";
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
-import { provideRouter, withDebugTracing } from "@angular/router";
 import { SwUpdate } from "@angular/service-worker";
 import { EMPTY } from "rxjs";
 
 import { AppComponent } from "./app/app.component";
-import { DashboardComponent } from "./app/dashboard/dashboard.component";
 import { SpinnerOverlay } from "./common/overlay/spinner-overlay.service";
 import { ErrorInterceptor } from "./common/services/error.interceptor.service";
 import { AntHeartRateService } from "./common/services/heart-rate/ant-heart-rate.service";
@@ -22,16 +20,16 @@ bootstrapApplication(AppComponent, {
     providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
-        provideRouter(
-            [
-                {
-                    path: "",
-                    component: DashboardComponent,
-                },
-                { path: "**", redirectTo: "" },
-            ],
-            withDebugTracing(),
-        ),
+        // provideRouter(
+        //     [
+        //         {
+        //             path: "",
+        //             component: DashboardComponent,
+        //         },
+        //         { path: "**", redirectTo: "" },
+        //     ],
+        //     withDebugTracing(),
+        // ),
         SpinnerOverlay,
         // workaround to override Angular Material's no animation in case of reduced motion preference
         { provide: MediaMatcher, useClass: CustomMediaMatcher },

@@ -2,7 +2,6 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, isDevMod
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatIconRegistry } from "@angular/material/icon";
 import { MatSnackBar } from "@angular/material/snack-bar";
-import { RouterOutlet } from "@angular/router";
 import { SwUpdate, VersionEvent, VersionReadyEvent } from "@angular/service-worker";
 import { filter, Observable, switchMap, timer } from "rxjs";
 
@@ -12,12 +11,14 @@ import { ErgGenericDataService } from "../common/services/ergometer/erg-generic-
 import { FirmwareUpdateManagerService } from "../common/services/ergometer/firmware-update-manager.service";
 import { SnackBarConfirmComponent } from "../common/snack-bar-confirm/snack-bar-confirm.component";
 
+import { DashboardComponent } from "./dashboard/dashboard.component";
+
 @Component({
     selector: "app-root",
     templateUrl: "./app.component.html",
     styleUrls: ["./app.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [RouterOutlet],
+    imports: [DashboardComponent],
 })
 export class AppComponent implements AfterViewInit {
     constructor(

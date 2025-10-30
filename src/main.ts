@@ -75,6 +75,8 @@ bootstrapApplication(AppComponent, {
         /(?<ios>iPad|iPhone|iPod)|(?<ipadmac>Macintosh).*?(?=\))(?=.*?Mobile)|(?<browser>CriOS|Chrome|Safari|Firefox|Edg)/,
     );
 
+    console.log(match);
+
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");
     const advice = document.getElementById("global-error-advice");

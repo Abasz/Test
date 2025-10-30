@@ -76,11 +76,11 @@ bootstrapApplication(AppComponent, {
     );
 
     console.log(match);
+    console.log(document);
 
     const overlay = document.getElementById("global-error-overlay");
     const msg = document.getElementById("global-error-message");
     const advice = document.getElementById("global-error-advice");
-
     console.log(overlay, msg, advice);
     if (overlay && msg && advice) {
         overlay.classList.add("active");

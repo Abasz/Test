@@ -55,7 +55,7 @@ bootstrapApplication(AppComponent, {
         {
             provide: AntHeartRateService,
             useFactory: (snack: MatSnackBar, destroyRef: DestroyRef): AntHeartRateService => {
-                if (isSecureContext === true && "usb" in navigator) {
+                if (isSecureContext === true && /* "usb" in navigator */) {
                     return new AntHeartRateService(snack, destroyRef);
                 }
 

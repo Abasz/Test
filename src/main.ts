@@ -112,4 +112,5 @@ bootstrapApplication(AppComponent, {
     }
 
     console.error("Angular bootstrap failed:", err instanceof Error ? err.message : String(err));
+    console.error("Angular bootstrap failed:", err instanceof Error ? err.stack : String(err));
 });

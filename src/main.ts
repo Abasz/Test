@@ -55,7 +55,7 @@ bootstrapApplication(AppComponent, {
         {
             provide: AntHeartRateService,
             useFactory: (snack: MatSnackBar, destroyRef: DestroyRef): AntHeartRateService => {
-                if (isSecureContext === true /* &&  "usb" in navigator */) {
+                if (isSecureContext === true && "usb" in navigator) {
                     return new AntHeartRateService(snack, destroyRef);
                 }
 
@@ -63,6 +63,7 @@ bootstrapApplication(AppComponent, {
                     discover: (): Promise<void> => {
                         throw Error("WebUSB API is not available");
                     },
+                    disconnectDevice: (): Promise<void> => Promise.resolve(),
                 } as unknown as AntHeartRateService;
             },
             deps: [MatSnackBar, DestroyRef],

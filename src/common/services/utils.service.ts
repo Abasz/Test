@@ -71,12 +71,12 @@ export class UtilsService {
                 filter((): boolean => document.visibilityState === "visible" && !this.wakeLock.enabled),
                 tap((): void => {
                     try {
-                        // fromEvent(document, "click")
-                        //     .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-                        //     .subscribe((): void => {
-                        this.wakeLock.enable();
-                        console.log("Wake lock enabled: ", this.wakeLock.enabled);
-                        // });
+                        fromEvent(document, "click")
+                            .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+                            .subscribe((): void => {
+                                this.wakeLock.enable();
+                                console.log("Wake lock enabled: ", this.wakeLock.enabled);
+                            });
                     } catch (error: unknown) {
                         if (error instanceof Error) {
                             setTimeout((): void => {

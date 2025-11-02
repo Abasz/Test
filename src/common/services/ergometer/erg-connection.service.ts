@@ -1,6 +1,6 @@
 import { Injectable } from "@angular/core";
 import { MatSnackBar } from "@angular/material/snack-bar";
-import { fromEvent, Observable, take } from "rxjs";
+import { filter, fromEvent, Observable, skip, startWith, take, takeUntil } from "rxjs";
 
 import {
     BATTERY_LEVEL_CHARACTERISTIC,
@@ -262,43 +262,43 @@ export class ErgConnectionService extends ErgConnections {
     async reconnect(): Promise<void> {
         await this.disconnectDevice();
 
-        // const device = (await navigator.bluetooth.getDevices()).filter(
-        //     (device: BluetoothDevice): boolean =>
-        //         device.id === this.configManager.getItem("ergoMonitorBleId"),
-        // )?.[0];
+        const device = (await navigator.bluetooth.getDevices()).filter(
+            (device: BluetoothDevice): boolean =>
+                device.id === this.configManager.getItem("ergoMonitorBleId"),
+        )?.[0];
 
-        // if (device === undefined) {
-        //     return;
-        // }
+        if (device === undefined) {
+            return;
+        }
 
-        // fromEvent<BluetoothAdvertisingEvent>(device, "advertisementreceived")
-        //     .pipe(take(1))
-        //     .subscribe(this.reconnectHandler);
+        fromEvent<BluetoothAdvertisingEvent>(device, "advertisementreceived")
+            .pipe(take(1))
+            .subscribe(this.reconnectHandler);
 
-        // fromEvent(document, "visibilitychange")
-        //     .pipe(
-        //         startWith(document.visibilityState),
-        //         filter((): boolean => document.visibilityState === "visible"),
-        //         takeUntil(
-        //             this.connectionStatusSubject.pipe(
-        //                 skip(1),
-        //                 filter(
-        //                     (connectionStatus: IErgConnectionStatus): boolean =>
-        //                         connectionStatus.status !== "searching",
-        //                 ),
-        //             ),
-        //         ),
-        //     )
-        //     .subscribe(async (): Promise<void> => {
-        //         this.cancellationToken.abort();
-        //         this.cancellationToken = new AbortController();
-        //         try {
-        //             await device.watchAdvertisements({ signal: this.cancellationToken.signal });
-        //             this.connectionStatusSubject.next({ status: "searching" });
-        //         } catch {
-        //             this.reconnect();
-        //         }
-        //     });
+        fromEvent(document, "visibilitychange")
+            .pipe(
+                startWith(document.visibilityState),
+                filter((): boolean => document.visibilityState === "visible"),
+                takeUntil(
+                    this.connectionStatusSubject.pipe(
+                        skip(1),
+                        filter(
+                            (connectionStatus: IErgConnectionStatus): boolean =>
+                                connectionStatus.status !== "searching",
+                        ),
+                    ),
+                ),
+            )
+            .subscribe(async (): Promise<void> => {
+                this.cancellationToken.abort();
+                this.cancellationToken = new AbortController();
+                try {
+                    await device.watchAdvertisements({ signal: this.cancellationToken.signal });
+                    this.connectionStatusSubject.next({ status: "searching" });
+                } catch {
+                    this.reconnect();
+                }
+            });
     }
 
     private async connect(device: BluetoothDevice): Promise<void> {
@@ -355,11 +355,11 @@ export class ErgConnectionService extends ErgConnections {
         this.snackBar.open("Ergometer Monitor disconnected", "Dismiss");
     };
 
-    // private reconnectHandler: (event: BluetoothAdvertisingEvent) => void = (
-    //     event: BluetoothAdvertisingEvent,
-    // ): void => {
-    //     this.cancellationToken.abort();
+    private reconnectHandler: (event: BluetoothAdvertisingEvent) => void = (
+        event: BluetoothAdvertisingEvent,
+    ): void => {
+        this.cancellationToken.abort();
 
-    //     this.connect(event.device);
-    // };
+        this.connect(event.device);
+    };
 }

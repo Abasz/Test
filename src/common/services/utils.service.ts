@@ -72,10 +72,13 @@ export class UtilsService {
                 tap((): void => {
                     try {
                         if ("wakeLock" in navigator) {
+                            console.log("Requesting wake lock via official API");
                             this.wakeLock.enable();
 
                             return;
                         }
+
+                        console.log("Requesting wake lock via NoSleep.js");
                         fromEvent(document, "click")
                             .pipe(take(1), takeUntilDestroyed(this.destroyRef))
                             .subscribe((): void => {

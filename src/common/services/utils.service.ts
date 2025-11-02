@@ -71,19 +71,11 @@ export class UtilsService {
                 filter((): boolean => document.visibilityState === "visible" && !this.wakeLock.enabled),
                 tap((): void => {
                     try {
-                        // if ("wakeLock" in navigator) {
-                        //     console.log("Requesting wake lock via official API");
-                        //     this.wakeLock.enable();
-
-                        //     return;
-                        // }
-
-                        console.log("Requesting wake lock via NoSleep.js");
-                        fromEvent(document, "click")
-                            .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-                            .subscribe((): void => {
-                                this.wakeLock.enable();
-                            });
+                        // fromEvent(document, "click")
+                        //     .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+                        //     .subscribe((): void => {
+                        this.wakeLock.enable();
+                        // });
                     } catch (error: unknown) {
                         if (error instanceof Error) {
                             setTimeout((): void => {

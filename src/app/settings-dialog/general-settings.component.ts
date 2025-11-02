@@ -6,7 +6,6 @@ import {
     effect,
     input,
     InputSignal,
-    isDevMode,
     OnInit,
     output,
     OutputEmitterRef,
@@ -95,6 +94,10 @@ export class GeneralSettingsComponent implements OnInit {
     readonly compileDate: Date = new Date(versionInfo.timeStamp);
     readonly firmwareReleaseUrl: string = FirmwareUpdateManagerService.FIRMWARE_RELEASE_URL;
 
+    readonly navigator: Navigator = navigator;
+
+    readonly isServiceWorkerAvailable: boolean = "serviceWorker" in navigator;
+
     private readonly formValueChanged: Signal<
         Partial<
             | Omit<IRowerSettings, "isRuntimeSettingsEnabled">
@@ -180,7 +183,7 @@ export class GeneralSettingsComponent implements OnInit {
     }
 
     async checkForUpdates(): Promise<void> {
-        if (isDevMode() || this.isGuiUpdateInProgress()) {
+        if (!this.isServiceWorkerAvailable || this.isGuiUpdateInProgress()) {
             return;
         }
 

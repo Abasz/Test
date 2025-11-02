@@ -76,6 +76,8 @@ export class AppComponent implements OnInit {
                 this.snackBar.open(`Failed to check for updates: ", ${err}`, "Dismiss");
                 console.error("Failed to check for updates:", err);
             }
+        } else {
+            console.log("Service Worker is not enabled");
         }
 
         if (isSecureContext !== true || navigator.bluetooth === undefined) {

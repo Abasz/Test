@@ -66,11 +66,6 @@ export class UtilsService {
     }
 
     enableWakeLock(): void {
-        fromEvent(document, "click")
-            .pipe(take(10), takeUntilDestroyed(this.destroyRef))
-            .subscribe((): void => {
-                console.log("Wake lock enabled: ", this.wakeLock.enabled);
-            });
         fromEvent(document, "visibilitychange")
             .pipe(
                 startWith(document.visibilityState),

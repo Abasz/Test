@@ -200,61 +200,55 @@ export class DataRecorderService {
         return from(
             liveQuery(
                 (): Promise<Array<ISessionSummary | undefined>> =>
-                    appDB
-                        .transaction(
-                            "r",
-                            appDB.sessionData,
-                            appDB.connectedDevice,
-                            async (): Promise<Array<ISessionSummary | undefined>> => {
-                                const uniqueSessionIds = [];
+                    appDB.transaction(
+                        "r",
+                        appDB.sessionData,
+                        appDB.connectedDevice,
+                        async (): Promise<Array<ISessionSummary | undefined>> => {
+                            const uniqueSessionIds = [];
 
-                                try {
-                                    uniqueSessionIds.push(
-                                        ...(await appDB.sessionData.orderBy("sessionId").uniqueKeys()),
-                                    );
-                                } catch (error) {
-                                    if (!(error instanceof Dexie.UnknownError)) {
-                                        console.error("Error fetching unique session IDs:", error);
-                                    }
-                                }
-
-                                return Promise.all(
-                                    uniqueSessionIds.map(
-                                        async (
-                                            sessionId: IndexableTypePart,
-                                        ): Promise<ISessionSummary | undefined> => {
-                                            const [connectedDevice, first, last]: [
-                                                IConnectedDeviceEntity | undefined,
-                                                IMetricsEntity | undefined,
-                                                IMetricsEntity | undefined,
-                                            ] = await Promise.all([
-                                                appDB.connectedDevice.where({ sessionId }).last(),
-                                                appDB.sessionData.where({ sessionId }).first(),
-                                                appDB.sessionData.where({ sessionId }).last(),
-                                            ]);
-
-                                            if (first === undefined || last === undefined) {
-                                                return undefined;
-                                            }
-
-                                            return {
-                                                sessionId: last.sessionId,
-                                                deviceName: connectedDevice?.deviceName,
-                                                startTime: first.timeStamp - first.driveDuration / 1000,
-                                                finishTime: last.timeStamp,
-                                                distance: last.distance,
-                                                strokeCount: last.strokeCount,
-                                            };
-                                        },
-                                    ),
+                            try {
+                                uniqueSessionIds.push(
+                                    ...(await appDB.sessionData.orderBy("sessionId").uniqueKeys()),
                                 );
-                            },
-                        )
-                        .catch((error: unknown): Array<ISessionSummary | undefined> => {
-                            console.error("Database error:", error);
+                            } catch (error) {
+                                if (!(error instanceof Dexie.UnknownError)) {
+                                    console.error("Error fetching unique session IDs:", error);
+                                }
+                            }
 
-                            return [];
-                        }),
+                            return Promise.all(
+                                uniqueSessionIds.map(
+                                    async (
+                                        sessionId: IndexableTypePart,
+                                    ): Promise<ISessionSummary | undefined> => {
+                                        const [connectedDevice, first, last]: [
+                                            IConnectedDeviceEntity | undefined,
+                                            IMetricsEntity | undefined,
+                                            IMetricsEntity | undefined,
+                                        ] = await Promise.all([
+                                            appDB.connectedDevice.where({ sessionId }).last(),
+                                            appDB.sessionData.where({ sessionId }).first(),
+                                            appDB.sessionData.where({ sessionId }).last(),
+                                        ]);
+
+                                        if (first === undefined || last === undefined) {
+                                            return undefined;
+                                        }
+
+                                        return {
+                                            sessionId: last.sessionId,
+                                            deviceName: connectedDevice?.deviceName,
+                                            startTime: first.timeStamp - first.driveDuration / 1000,
+                                            finishTime: last.timeStamp,
+                                            distance: last.distance,
+                                            strokeCount: last.strokeCount,
+                                        };
+                                    },
+                                ),
+                            );
+                        },
+                    ),
             ),
         ).pipe(
             filter(
@@ -290,10 +284,14 @@ export class DataRecorderService {
 
     private createDownload(blob: Blob, name: string): void {
         const url = window.URL.createObjectURL(blob);
-        const downloadTag = document.createElement("a");
-        downloadTag.href = url;
-        downloadTag.download = name;
-        downloadTag.click();
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
     }
 
     private async getDeltaTimes(sessionId: number): Promise<Array<number>> {

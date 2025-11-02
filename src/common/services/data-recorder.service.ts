@@ -1,5 +1,5 @@
 import { Injectable } from "@angular/core";
-import { IndexableTypePart, liveQuery } from "dexie";
+import { Dexie, IndexableTypePart, liveQuery } from "dexie";
 import { exportDB, ExportProgress, importInto, peakImportFile } from "dexie-export-import";
 import { ImportProgress } from "dexie-export-import/dist/import";
 import { parse } from "js2xmlparser";

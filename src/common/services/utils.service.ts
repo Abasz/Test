@@ -62,9 +62,15 @@ export class UtilsService {
 
     disableWakeLock(): void {
         this.wakeLock.disable();
+        console.log("Wake lock disabled: ", this.wakeLock.enabled);
     }
 
     enableWakeLock(): void {
+        fromEvent(document, "click")
+            .pipe(take(10), takeUntilDestroyed(this.destroyRef))
+            .subscribe((): void => {
+                console.log("Wake lock enabled: ", this.wakeLock.enabled);
+            });
         fromEvent(document, "visibilitychange")
             .pipe(
                 startWith(document.visibilityState),

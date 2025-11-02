@@ -206,11 +206,17 @@ export class DataRecorderService {
                             appDB.sessionData,
                             appDB.connectedDevice,
                             async (): Promise<Array<ISessionSummary | undefined>> => {
-                                console.log("Fetching session summaries2");
-                                const uniqueSessionIds = await appDB.sessionData
-                                    .orderBy("sessionId")
-                                    .uniqueKeys();
-                                console.log("Unique session IDs:", uniqueSessionIds);
+                                const uniqueSessionIds = [];
+
+                                try {
+                                    uniqueSessionIds.push(
+                                        ...(await appDB.sessionData.orderBy("sessionId").uniqueKeys()),
+                                    );
+                                } catch (error) {
+                                    if (!(error instanceof Dexie.UnknownError)) {
+                                        console.error("Error fetching unique session IDs:", error);
+                                    }
+                                }
 
                                 return Promise.all(
                                     uniqueSessionIds.map(

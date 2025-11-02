@@ -15,12 +15,14 @@ export class AppDB extends Dexie {
 
     constructor() {
         super("ESPRowingMonitorDB");
+        console.log("Initializing AppDB");
         this.version(2).stores({
             deltaTimes: "&timeStamp, sessionId",
             handleForces: "&timeStamp, sessionId, [sessionId+strokeId]",
             sessionData: "&timeStamp, sessionId",
             connectedDevice: "&sessionId",
         });
+        console.log("AppDB initialized");
     }
 }
 

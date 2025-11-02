@@ -54,7 +54,17 @@
                                     "maximumWarning": "2kb",
                                     "maximumError": "400kb"
                                 }
-                            ]
+                            ],
+                            "optimization": {
+                                "scripts": false,
+                                "styles": false,
+                                "fonts": false
+                            },
+                            "outputHashing": "all",
+                            "sourceMap": true,
+                            "namedChunks": true,
+                            "extractLicenses": false,
+                            "aot": true
                         },
                         "development": {
                             "optimization": false,

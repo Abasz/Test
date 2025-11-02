@@ -195,50 +195,60 @@ export class DataRecorderService {
     }
 
     getSessionSummaries$(): Observable<Array<ISessionSummary>> {
+        console.log("Fetching session summaries");
+
         return from(
             liveQuery(
                 (): Promise<Array<ISessionSummary | undefined>> =>
-                    appDB.transaction(
-                        "r",
-                        appDB.sessionData,
-                        appDB.connectedDevice,
-                        async (): Promise<Array<ISessionSummary | undefined>> => {
-                            const uniqueSessionIds = await appDB.sessionData
-                                .orderBy("sessionId")
-                                .uniqueKeys();
+                    appDB
+                        .transaction(
+                            "r",
+                            appDB.sessionData,
+                            appDB.connectedDevice,
+                            async (): Promise<Array<ISessionSummary | undefined>> => {
+                                console.log("Fetching session summaries2");
+                                const uniqueSessionIds = await appDB.sessionData
+                                    .orderBy("sessionId")
+                                    .uniqueKeys();
+                                console.log("Unique session IDs:", uniqueSessionIds);
 
-                            return Promise.all(
-                                uniqueSessionIds.map(
-                                    async (
-                                        sessionId: IndexableTypePart,
-                                    ): Promise<ISessionSummary | undefined> => {
-                                        const [connectedDevice, first, last]: [
-                                            IConnectedDeviceEntity | undefined,
-                                            IMetricsEntity | undefined,
-                                            IMetricsEntity | undefined,
-                                        ] = await Promise.all([
-                                            appDB.connectedDevice.where({ sessionId }).last(),
-                                            appDB.sessionData.where({ sessionId }).first(),
-                                            appDB.sessionData.where({ sessionId }).last(),
-                                        ]);
+                                return Promise.all(
+                                    uniqueSessionIds.map(
+                                        async (
+                                            sessionId: IndexableTypePart,
+                                        ): Promise<ISessionSummary | undefined> => {
+                                            const [connectedDevice, first, last]: [
+                                                IConnectedDeviceEntity | undefined,
+                                                IMetricsEntity | undefined,
+                                                IMetricsEntity | undefined,
+                                            ] = await Promise.all([
+                                                appDB.connectedDevice.where({ sessionId }).last(),
+                                                appDB.sessionData.where({ sessionId }).first(),
+                                                appDB.sessionData.where({ sessionId }).last(),
+                                            ]);
 
-                                        if (first === undefined || last === undefined) {
-                                            return undefined;
-                                        }
+                                            if (first === undefined || last === undefined) {
+                                                return undefined;
+                                            }
 
-                                        return {
-                                            sessionId: last.sessionId,
-                                            deviceName: connectedDevice?.deviceName,
-                                            startTime: first.timeStamp - first.driveDuration / 1000,
-                                            finishTime: last.timeStamp,
-                                            distance: last.distance,
-                                            strokeCount: last.strokeCount,
-                                        };
-                                    },
-                                ),
-                            );
-                        },
-                    ),
+                                            return {
+                                                sessionId: last.sessionId,
+                                                deviceName: connectedDevice?.deviceName,
+                                                startTime: first.timeStamp - first.driveDuration / 1000,
+                                                finishTime: last.timeStamp,
+                                                distance: last.distance,
+                                                strokeCount: last.strokeCount,
+                                            };
+                                        },
+                                    ),
+                                );
+                            },
+                        )
+                        .catch((error: unknown): Array<ISessionSummary | undefined> => {
+                            console.error("Database error:", error);
+
+                            return [];
+                        }),
             ),
         ).pipe(
             filter(

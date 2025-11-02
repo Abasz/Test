@@ -72,7 +72,7 @@ export class UtilsService {
                 tap((): void => {
                     try {
                         fromEvent(document, "click")
-                            .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+                            .pipe(take(10), takeUntilDestroyed(this.destroyRef))
                             .subscribe((): void => {
                                 this.wakeLock.enable();
                                 console.log("Wake lock enabled: ", this.wakeLock.enabled);

@@ -283,6 +283,7 @@ export class DataRecorderService {
     }
 
     private createDownload(blob: Blob, name: string): void {
+        console.log("Creating download for:", name);
         const url = window.URL.createObjectURL(blob);
         window.open(url, "_blank");
         // clean up after a delay

@@ -1,5 +1,5 @@
 export const versionInfo = {
-    timeStamp: "2025-11-02T11:12:23.077Z",
+    timeStamp: "2025-11-02T11:13:23.077Z",
     latestFirmwareRelease: {
         version: "6.2.0",
         name: "ESP Rowing Monitor v6.2.0 Release",

@@ -170,7 +170,7 @@ export class ErgSettingsService {
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(
+            await characteristic.writeValueWithoutResponse(
                 new Uint8Array([BleOpCodes.ChangeBleService, bleService]),
             );
 
@@ -209,7 +209,7 @@ export class ErgSettingsService {
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(
+            await characteristic.writeValueWithoutResponse(
                 new Uint8Array([BleOpCodes.SetDeltaTimeLogging, shouldEnable ? 1 : 0]),
             );
 
@@ -243,7 +243,9 @@ export class ErgSettingsService {
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(new Uint8Array([BleOpCodes.SetLogLevel, logLevel]));
+            await characteristic.writeValueWithoutResponse(
+                new Uint8Array([BleOpCodes.SetLogLevel, logLevel]),
+            );
 
             this.snackBar.open(
                 (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
@@ -275,7 +277,7 @@ export class ErgSettingsService {
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(
+            await characteristic.writeValueWithoutResponse(
                 new Uint8Array([BleOpCodes.SetSdCardLogging, shouldEnable ? 1 : 0]),
             );
 
@@ -316,7 +318,7 @@ export class ErgSettingsService {
             payload.setUint16(7, Math.round(machineSettings.sprocketRadius * 1000), true);
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(payload);
+            await characteristic.writeValueWithoutResponse(payload);
 
             this.snackBar.open(
                 (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
@@ -353,7 +355,7 @@ export class ErgSettingsService {
             payload.setUint8(2, sensorSignalSettings.rowingStoppedThreshold);
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(payload);
+            await characteristic.writeValueWithoutResponse(payload);
 
             this.snackBar.open(
                 (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
@@ -393,7 +395,7 @@ export class ErgSettingsService {
             payload.setUint8(7, dragFactorSettings.dragCoefficientsArrayLength & 0xff);
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(payload);
+            await characteristic.writeValueWithoutResponse(payload);
 
             this.snackBar.open(
                 (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
@@ -449,7 +451,7 @@ export class ErgSettingsService {
             payload.setUint8(15, strokeDetectionSettings.driveHandleForcesMaxCapacity);
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(payload);
+            await characteristic.writeValueWithoutResponse(payload);
 
             this.snackBar.open(
                 (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
@@ -481,7 +483,7 @@ export class ErgSettingsService {
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             await characteristic.startNotifications();
-            await characteristic.writeValueWithResponse(new Uint8Array([BleOpCodes.RestartDevice]));
+            await characteristic.writeValueWithoutResponse(new Uint8Array([BleOpCodes.RestartDevice]));
 
             const response = (await responseTask).getUint8(2);
             if (response === BleResponseOpCodes.Successful) {

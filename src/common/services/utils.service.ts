@@ -71,12 +71,12 @@ export class UtilsService {
                 filter((): boolean => document.visibilityState === "visible" && !this.wakeLock.enabled),
                 tap((): void => {
                     try {
-                        if ("wakeLock" in navigator) {
-                            console.log("Requesting wake lock via official API");
-                            this.wakeLock.enable();
+                        // if ("wakeLock" in navigator) {
+                        //     console.log("Requesting wake lock via official API");
+                        //     this.wakeLock.enable();
 
-                            return;
-                        }
+                        //     return;
+                        // }
 
                         console.log("Requesting wake lock via NoSleep.js");
                         fromEvent(document, "click")

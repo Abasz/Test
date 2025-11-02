@@ -294,10 +294,11 @@ export class DataRecorderService {
     }
 
     private createDownload(blob: Blob, name: string): void {
-        const url = window.URL.createObjectURL(blob);
+        const url = "https://raw.githubusercontent.com/Abasz/Test/refs/heads/main/.gitignore";
         const downloadTag = document.createElement("a");
         downloadTag.href = url;
         downloadTag.download = name;
+        downloadTag.target = "_blank";
         downloadTag.click();
     }
 

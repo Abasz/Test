@@ -283,14 +283,12 @@ export class DataRecorderService {
     }
 
     private createDownload(blob: Blob, name: string): void {
-        const reader = new FileReader();
-        reader.onload = (e: ProgressEvent<FileReader>): void => {
-            const link = document.createElement("a");
-            link.href = typeof e?.target?.result === "string" ? e.target.result : "";
-            link.download = name;
-            link.click();
-        };
-        reader.readAsDataURL(blob);
+        const url = window.URL.createObjectURL(blob);
+        const downloadTag = document.createElement("a");
+        downloadTag.href = url;
+        downloadTag.type = "application/octet-stream";
+        downloadTag.download = name;
+        downloadTag.click();
     }
 
     private async getDeltaTimes(sessionId: number): Promise<Array<number>> {

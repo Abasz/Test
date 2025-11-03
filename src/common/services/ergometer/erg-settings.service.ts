@@ -242,13 +242,20 @@ export class ErgSettingsService {
 
             const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
+            console.log("Changing log level to:", logLevel);
             await characteristic.startNotifications();
+            console.log("Started notifications for log level change");
             await characteristic.writeValueWithoutResponse(
                 new Uint8Array([BleOpCodes.SetLogLevel, logLevel]),
             );
+            console.log("Wrote log level change request");
+
+            const test = (await responseTask).getUint8(2);
+
+            console.log("Received response for log level change:", test);
 
             this.snackBar.open(
-                (await responseTask).getUint8(2) === BleResponseOpCodes.Successful
+                test === BleResponseOpCodes.Successful
                     ? "Log level changed"
                     : "An error occurred while changing Log level",
                 "Dismiss",

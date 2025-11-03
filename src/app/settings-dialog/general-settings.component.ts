@@ -75,6 +75,7 @@ export class GeneralSettingsComponent implements OnInit {
     readonly BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
     readonly BleServiceNames: typeof BleServiceNames = BleServiceNames;
     readonly LogLevel: typeof LogLevel = LogLevel;
+    readonly isAntSupported: boolean = "usb" in navigator;
 
     readonly rowerSettings: InputSignal<IRowerSettings> = input.required<IRowerSettings>();
     readonly deviceInfo: InputSignal<IDeviceInformation> = input.required<IDeviceInformation>();
@@ -93,10 +94,6 @@ export class GeneralSettingsComponent implements OnInit {
 
     readonly compileDate: Date = new Date(versionInfo.timeStamp);
     readonly firmwareReleaseUrl: string = FirmwareUpdateManagerService.FIRMWARE_RELEASE_URL;
-
-    readonly navigator: Navigator = navigator;
-
-    readonly isServiceWorkerAvailable: boolean = "serviceWorker" in navigator;
 
     private readonly formValueChanged: Signal<
         Partial<
@@ -183,7 +180,7 @@ export class GeneralSettingsComponent implements OnInit {
     }
 
     async checkForUpdates(): Promise<void> {
-        if (!this.isServiceWorkerAvailable || this.isGuiUpdateInProgress()) {
+        if (!this.swUpdate.isEnabled || this.isGuiUpdateInProgress()) {
             return;
         }
 

@@ -189,16 +189,12 @@ export class DataRecorderService {
 
         const csvContent = `${headers}\n${csvBody}`;
 
-        // const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const name = `${new Date(sessionId).toDateTimeStringFormat()} - session.csv`;
-        // this.createDownload(blob, name);
-
-        this.createDownloadFromString(csvContent, "text/csv;charset=utf-8;", name);
+        this.createDownload(blob, name);
     }
 
     getSessionSummaries$(): Observable<Array<ISessionSummary>> {
-        console.log("Fetching session summaries");
-
         return from(
             liveQuery(
                 (): Promise<Array<ISessionSummary | undefined>> =>
@@ -284,22 +280,11 @@ export class DataRecorderService {
         this.currentSessionId = Date.now();
     }
 
-    private createDownloadFromString(content: string, mimeType: string, name: string): void {
-        const dataUrl = `data:${mimeType};base64,${btoa(encodeURIComponent(content))}`;
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = name;
-        link.target = "_blank";
-        link.click();
-    }
-
     private createDownload(blob: Blob, name: string): void {
-        console.log("Creating download for:", blob);
-        const url = "https://raw.githubusercontent.com/Abasz/Test/refs/heads/main/.gitignore";
+        const url = window.URL.createObjectURL(blob);
         const downloadTag = document.createElement("a");
         downloadTag.href = url;
         downloadTag.download = name;
-        downloadTag.target = "_blank";
         downloadTag.click();
     }
 

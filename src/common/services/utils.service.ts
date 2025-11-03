@@ -62,7 +62,6 @@ export class UtilsService {
 
     disableWakeLock(): void {
         this.wakeLock.disable();
-        console.log("Wake lock disabled: ", this.wakeLock.enabled);
     }
 
     enableWakeLock(): void {
@@ -76,7 +75,6 @@ export class UtilsService {
                             .pipe(take(1), takeUntilDestroyed(this.destroyRef))
                             .subscribe((): void => {
                                 this.wakeLock.enable();
-                                console.log("Wake lock enabled: ", this.wakeLock.enabled);
                             });
                     } catch (error: unknown) {
                         if (error instanceof Error) {

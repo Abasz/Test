@@ -87,9 +87,9 @@ export class SettingsBarComponent {
                         maxWidth: "95vw",
                     });
                 },
-                error: (err: unknown): void => {
+                error: (error: unknown): void => {
                     this.utils.mainSpinner().close();
-                    console.error("Failed to load session summaries:", err);
+                    console.error("Failed to load session summaries for logbook:", error);
                 },
             });
     }

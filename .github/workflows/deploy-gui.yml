@@ -1,7 +1,6 @@
 name: Publish
 
 on:
-  push:
   release:
     types: [published]
 
@@ -24,7 +23,7 @@ jobs:
       - name: 🚧 Npm install & Build
         run: |
           npm install
-          npm run build -- --base-href=/Test/
+          npm run build -- --base-href=/ESPRowingMonitor-WebGUI/
 
       - name: 📎 Upload artifact
         uses: actions/upload-pages-artifact@v3

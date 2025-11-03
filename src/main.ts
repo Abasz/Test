@@ -4,8 +4,7 @@ import { DestroyRef, importProvidersFrom, isDevMode, provideZonelessChangeDetect
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS, MatSnackBar } from "@angular/material/snack-bar";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
-import { ServiceWorkerModule, SwUpdate } from "@angular/service-worker";
-import { EMPTY } from "rxjs";
+import { ServiceWorkerModule } from "@angular/service-worker";
 
 import { AppComponent } from "./app/app.component";
 import { DashboardComponent } from "./app/dashboard/dashboard.component";
@@ -33,16 +32,6 @@ bootstrapApplication(AppComponent, {
         SpinnerOverlay,
         // workaround to override Angular Material's no animation in case of reduced motion preference
         { provide: MediaMatcher, useClass: CustomMediaMatcher },
-        {
-            provide: SwUpdate,
-            useValue: {
-                versionUpdates: EMPTY,
-                unrecoverable: EMPTY,
-                checkForUpdate: (): Promise<boolean> => Promise.resolve(false),
-                activateUpdate: (): Promise<boolean> => Promise.resolve(false),
-                isEnabled: false,
-            },
-        },
         importProvidersFrom(
             ServiceWorkerModule.register("ngsw-worker.js", {
                 enabled: !isDevMode(),

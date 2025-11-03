@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit } from "@angular/core";
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatIconRegistry } from "@angular/material/icon";
 import { MatSnackBar } from "@angular/material/snack-bar";
+import { RouterOutlet } from "@angular/router";
 import { SwUpdate, VersionEvent, VersionReadyEvent } from "@angular/service-worker";
 import { filter, Observable, switchMap, timer } from "rxjs";
 
@@ -11,16 +12,14 @@ import { ErgGenericDataService } from "../common/services/ergometer/erg-generic-
 import { FirmwareUpdateManagerService } from "../common/services/ergometer/firmware-update-manager.service";
 import { SnackBarConfirmComponent } from "../common/snack-bar-confirm/snack-bar-confirm.component";
 
-import { DashboardComponent } from "./dashboard/dashboard.component";
-
 @Component({
     selector: "app-root",
     templateUrl: "./app.component.html",
     styleUrls: ["./app.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [DashboardComponent],
+    imports: [RouterOutlet],
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements AfterViewInit {
     constructor(
         private destroyRef: DestroyRef,
         private matIconReg: MatIconRegistry,
@@ -68,7 +67,7 @@ export class AppComponent implements OnInit {
         }
     }
 
-    async ngOnInit(): Promise<void> {
+    async ngAfterViewInit(): Promise<void> {
         if (this.swUpdate.isEnabled) {
             try {
                 await this.swUpdate.checkForUpdate();
@@ -76,8 +75,6 @@ export class AppComponent implements OnInit {
                 this.snackBar.open(`Failed to check for updates: ", ${err}`, "Dismiss");
                 console.error("Failed to check for updates:", err);
             }
-        } else {
-            console.log("Service Worker is not enabled");
         }
 
         if (isSecureContext !== true || navigator.bluetooth === undefined) {
@@ -117,8 +114,6 @@ export class AppComponent implements OnInit {
 
             console.error("Error making storage persistent:", error);
         }
-
-        console.log("app started");
     }
 
     private showFirmwareUpdateNotification(): void {

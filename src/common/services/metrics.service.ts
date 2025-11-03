@@ -78,7 +78,6 @@ export class MetricsService {
             });
 
         if (isSecureContext === true && navigator.bluetooth !== undefined) {
-            console.log("Attempting to reconnect to previously connected ergometer, METRICS SERVICE");
             this.ergConnectionService.reconnect();
         }
     }

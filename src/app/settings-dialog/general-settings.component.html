@@ -30,7 +30,7 @@
             >
                 <mat-option value="off">off</mat-option>
                 <mat-option value="ble">ble</mat-option>
-                @if ("usb" in navigator) {
+                @if (isAntSupported) {
                     <mat-option value="ant">ant</mat-option>
                 }
             </mat-select>
@@ -136,16 +136,14 @@
     </div>
     <div versionInfo class="items-center">
         <span>GUI Version: {{ compileDate | date: "yyMMddHHmmss" }}</span>
-        @if (isServiceWorkerAvailable) {
-            <button
-                matTooltipShowDelay="1000"
-                matTooltip="{{ isGuiUpdateInProgress() ? 'Checking' : 'Check' }} for update"
-                class="small-icon-button"
-                mat-icon-button
-                (click)="checkForUpdates()"
-            >
-                <mat-icon [class.rotating]="isGuiUpdateInProgress()">refresh</mat-icon>
-            </button>
-        }
+        <button
+            matTooltipShowDelay="1000"
+            matTooltip="{{ isGuiUpdateInProgress() ? 'Checking' : 'Check' }} for update"
+            class="small-icon-button"
+            mat-icon-button
+            (click)="checkForUpdates()"
+        >
+            <mat-icon [class.rotating]="isGuiUpdateInProgress()">refresh</mat-icon>
+        </button>
     </div>
 </div>

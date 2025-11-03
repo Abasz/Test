@@ -10,7 +10,7 @@
             mat-icon-button
         >
             <mat-icon [ngClass]="hrConnectionStatus().status === 'connecting' ? 'blink' : ''">{{
-                hrConnectionStatus().status === "disconnected" ? "favorite" : "ecg_heart"
+                hrConnectionStatus().status === "connected" ? "ecg_heart" : "favorite"
             }}</mat-icon>
         </button>
     }

@@ -42,7 +42,7 @@ export class OtaService {
 
         const abortResponseTask = firstValueFrom(tx);
 
-        this.sendCharacteristic.writeValueWithResponse(new Uint8Array([OtaRequestOpCodes.Abort]));
+        this.sendCharacteristic.writeValueWithoutResponse(new Uint8Array([OtaRequestOpCodes.Abort]));
 
         this.progress.set(0);
         this.cancellationToken.abort();
@@ -102,7 +102,7 @@ export class OtaService {
             defaultValue: new DataView(new Uint8Array([OtaResponseOpCodes.NotOk]).buffer),
         });
 
-        sendCharacteristic.writeValueWithResponse(
+        sendCharacteristic.writeValueWithoutResponse(
             new Uint8Array([
                 OtaRequestOpCodes.Begin,
                 dataArray.length & 0xff,
@@ -130,7 +130,7 @@ export class OtaService {
         const md5responseTask = firstValueFrom(tx, {
             defaultValue: new DataView(new Uint8Array([OtaResponseOpCodes.NotOk]).buffer),
         });
-        await sendCharacteristic.writeValueWithResponse(
+        await sendCharacteristic.writeValueWithoutResponse(
             new Uint8Array([OtaRequestOpCodes.End, ...md5.array([...dataArray])]),
         );
 
@@ -174,7 +174,7 @@ export class OtaService {
                 if (this.cancellationToken.signal.aborted) {
                     return;
                 }
-                await sendCharacteristic.writeValueWithResponse(
+                await sendCharacteristic.writeValueWithoutResponse(
                     new Uint8Array([OtaRequestOpCodes.Package, ...currentChunk]),
                 );
             }

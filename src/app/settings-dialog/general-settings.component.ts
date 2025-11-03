@@ -75,7 +75,9 @@ export class GeneralSettingsComponent implements OnInit {
     readonly BleServiceFlag: typeof BleServiceFlag = BleServiceFlag;
     readonly BleServiceNames: typeof BleServiceNames = BleServiceNames;
     readonly LogLevel: typeof LogLevel = LogLevel;
-    readonly isAntSupported: boolean = "usb" in navigator;
+
+    readonly isAntSupported: boolean = "usb" in navigator && !!navigator.usb;
+    readonly isServiceWorkerAvailable: boolean = "serviceWorker" in navigator && !!navigator.serviceWorker;
 
     readonly rowerSettings: InputSignal<IRowerSettings> = input.required<IRowerSettings>();
     readonly deviceInfo: InputSignal<IDeviceInformation> = input.required<IDeviceInformation>();

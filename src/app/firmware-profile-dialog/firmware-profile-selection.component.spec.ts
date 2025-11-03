@@ -499,7 +499,7 @@ describe("FirmwareProfileSelectionComponent", (): void => {
         });
 
         it("should display profile names in list options", (): void => {
-            const options = fixture.nativeElement.querySelectorAll("mat-list-option div[matListItemTitle]");
+            const options = fixture.nativeElement.querySelectorAll("mat-list-option");
 
             expect(options[0].textContent?.trim()).toBe("Concept2 Model D");
             expect(options[1].textContent?.trim()).toBe("WaterRower");

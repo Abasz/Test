@@ -136,14 +136,16 @@
     </div>
     <div versionInfo class="items-center">
         <span>GUI Version: {{ compileDate | date: "yyMMddHHmmss" }}</span>
-        <button
-            matTooltipShowDelay="1000"
-            matTooltip="{{ isGuiUpdateInProgress() ? 'Checking' : 'Check' }} for update"
-            class="small-icon-button"
-            mat-icon-button
-            (click)="checkForUpdates()"
-        >
-            <mat-icon [class.rotating]="isGuiUpdateInProgress()">refresh</mat-icon>
-        </button>
+        @if (isServiceWorkerAvailable) {
+            <button
+                matTooltipShowDelay="1000"
+                matTooltip="{{ isGuiUpdateInProgress() ? 'Checking' : 'Check' }} for update"
+                class="small-icon-button"
+                mat-icon-button
+                (click)="checkForUpdates()"
+            >
+                <mat-icon [class.rotating]="isGuiUpdateInProgress()">refresh</mat-icon>
+            </button>
+        }
     </div>
 </div>

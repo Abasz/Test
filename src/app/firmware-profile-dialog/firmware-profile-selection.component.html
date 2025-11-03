@@ -3,7 +3,7 @@
 <mat-selection-list [multiple]="false" (selectionChange)="onSelectionChange($event)">
     @for (firmware of availableProfiles; track firmware) {
         <mat-list-option [value]="firmware">
-            <div matListItemTitle>{{ firmware.profileName }}</div>
+            {{ firmware.profileName }}
         </mat-list-option>
     } @empty {
         <div class="no-profiles-warning flex-col gap-8 items-center">

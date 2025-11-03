@@ -41,7 +41,7 @@ app-metric[icon="ecg_heart"] mat-icon {
 app-force-curve {
     grid-row: span 2;
 
-    @media (max-width: 890px) {
+    @media (max-width: 890px) or ((-webkit-device-pixel-ratio: 3) and (orientation: landscape)) {
         grid-column: span 2;
     }
 }

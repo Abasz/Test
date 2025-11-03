@@ -14,9 +14,17 @@ import { SpinnerOverlay } from "../overlay/spinner-overlay.service";
     providedIn: "root",
 })
 export class UtilsService {
-    isHandset$: Observable<boolean> = this.breakpointObserver
+    readonly isHandset$: Observable<boolean> = this.breakpointObserver
         .observe([Breakpoints.Handset, Breakpoints.TabletPortrait])
         .pipe(map((result: BreakpointState): boolean => result.matches));
+
+    get isIphone(): boolean {
+        const userAgent = navigator.userAgent;
+
+        return (
+            /iPad|iPhone|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && /Mobile/.test(userAgent))
+        );
+    }
 
     private mainSpinnerRef: SpinnerOverlayRef | undefined;
     private wakeLock: INoSleep = new NoSleep();

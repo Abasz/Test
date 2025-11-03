@@ -240,10 +240,10 @@ export class ErgSettingsService {
         try {
             const characteristic = await service.getCharacteristic(SETTINGS_CONTROL_POINT);
 
-            const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(10000)));
+            const responseTask = firstValueFrom(observeValue$(characteristic).pipe(timeout(1000)));
 
             console.log("Changing log level to:", logLevel);
-            await characteristic.startNotifications();
+            await withDelay(1000, characteristic.startNotifications());
             console.log("Started notifications for log level change");
             await characteristic.writeValueWithoutResponse(
                 new Uint8Array([BleOpCodes.SetLogLevel, logLevel]),

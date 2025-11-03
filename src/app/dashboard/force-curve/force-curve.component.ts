@@ -60,7 +60,7 @@ export class ForceCurveComponent {
             legend: {
                 title: {
                     display: true,
-                    // text: "Force Curve",
+                    text: "Force Curve",
                     color: "rgb(0,0,0)",
                     font: {
                         size: 32,
@@ -119,7 +119,7 @@ export class ForceCurveComponent {
         datasets: [
             {
                 fill: true,
-                label: "Force Curve",
+                // label: "Force Curve",
                 data: [],
                 borderColor: "rgb(31,119,180)",
                 backgroundColor: "rgb(31,119,180,0.5)",

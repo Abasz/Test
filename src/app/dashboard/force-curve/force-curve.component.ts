@@ -60,7 +60,7 @@ export class ForceCurveComponent {
             legend: {
                 title: {
                     display: true,
-                    text: "Force Curve",
+                    // text: "Force Curve",
                     color: "rgb(0,0,0)",
                     font: {
                         size: 32,

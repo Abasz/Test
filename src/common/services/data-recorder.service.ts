@@ -103,13 +103,13 @@ export class DataRecorderService {
 
         const files: Array<{ blob: Blob; name: string }> = [
             {
-                blob: new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" }),
+                blob: new Blob([JSON.stringify(rowingSessionData)], { type: "text/json" }),
                 name: `${new Date(sessionId).toDateTimeStringFormat()} - session.json`,
             },
         ];
 
         if (deltaTimes.length > 0) {
-            const blob = new Blob([JSON.stringify(deltaTimes)], { type: "application/json" });
+            const blob = new Blob([JSON.stringify(deltaTimes)], { type: "text/json" });
             const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.json`;
             files.push({ blob, name });
         }
@@ -313,7 +313,8 @@ export class DataRecorderService {
             const downloadTag = document.createElement("a");
             downloadTag.href = url;
             downloadTag.download = file.name;
-            window.open(url, "_blank");
+            // window.open(url, "_blank");
+            downloadTag.click();
             window.URL.revokeObjectURL(url);
         }
     }

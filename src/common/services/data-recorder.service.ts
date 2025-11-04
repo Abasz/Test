@@ -281,6 +281,29 @@ export class DataRecorderService {
     }
 
     private createDownload(blob: Blob, name: string): void {
+        console.log("Web share available:", navigator.share);
+
+        if (navigator.share) {
+            console.log("Using Web Share API to share the file");
+            const file = new File([blob], name, { type: "application/json" });
+
+            navigator.share({
+                title: "My File",
+                files: [file],
+            });
+
+            return;
+        }
+
+        console.log("Trygin fallback readasdaturl");
+        const reader = new FileReader();
+        reader.onload = (): void => {
+            const dataUrl = reader.result as string;
+            console.log("Opening data URL in new window/tab");
+            window.open(dataUrl, "_blank");
+        };
+        reader.readAsDataURL(blob);
+
         const url = window.URL.createObjectURL(blob);
         const downloadTag = document.createElement("a");
         downloadTag.href = url;

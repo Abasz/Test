@@ -90,7 +90,7 @@ export class DataRecorderService {
 
     async export(progressCallback?: (progress: ExportProgress) => boolean): Promise<void> {
         const database = await exportDB(appDB, { progressCallback });
-        const name = `${new Date().toDateTimeStringFormat()} - database.txt`;
+        const name = `${new Date().toDateTimeStringFormat()} - database.json`;
 
         this.createDownload([{ blob: database, name }]);
     }
@@ -104,13 +104,13 @@ export class DataRecorderService {
         const files: Array<{ blob: Blob; name: string }> = [
             {
                 blob: new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" }),
-                name: `${new Date(sessionId).toDateTimeStringFormat()} - session.txt`,
+                name: `${new Date(sessionId).toDateTimeStringFormat()} - session.json`,
             },
         ];
 
         if (deltaTimes.length > 0) {
             const blob = new Blob([JSON.stringify(deltaTimes)], { type: "application/json" });
-            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.txt`;
+            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.json`;
             files.push({ blob, name });
         }
 
@@ -287,9 +287,10 @@ export class DataRecorderService {
 
     private async createDownload(files: Array<{ blob: Blob; name: string }>): Promise<void> {
         const shareData: ShareData = {
-            files: files.map((file: { blob: Blob; name: string }): File => {
-                return new File([file.blob], file.name, { type: "text/json" });
-            }),
+            files: files.map(
+                (file: { blob: Blob; name: string }): File =>
+                    new File([file.blob], file.name, { type: file.blob.type }),
+            ),
         };
 
         if (navigator?.canShare(shareData)) {

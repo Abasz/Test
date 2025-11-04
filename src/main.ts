@@ -11,11 +11,10 @@ import { DashboardComponent } from "./app/dashboard/dashboard.component";
 import { SpinnerOverlay } from "./common/overlay/spinner-overlay.service";
 import { ErrorInterceptor } from "./common/services/error.interceptor.service";
 import { AntHeartRateService } from "./common/services/heart-rate/ant-heart-rate.service";
-import { ConsoleDomLogger } from "./common/utils/console-dom-logger";
 import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
 
 // initialize console DOM logger for development debugging
-ConsoleDomLogger.getInstance().initialize();
+// ConsoleDomLogger.getInstance().initialize();
 
 bootstrapApplication(AppComponent, {
     providers: [

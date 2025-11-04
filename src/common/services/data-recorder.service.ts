@@ -293,22 +293,27 @@ export class DataRecorderService {
             ),
         };
 
-        if (navigator.canShare(shareData)) {
+        if (navigator?.canShare(shareData)) {
             try {
                 await navigator.share(shareData);
 
                 return;
             } catch (error) {
-                console.error("Error sharing file:", error);
+                if (
+                    error instanceof DOMException &&
+                    !["AbortError", "NotAllowedError"].includes(error.name)
+                ) {
+                    console.error("Error sharing file:", error.name);
+                }
             }
-        }
 
-        for (const file of files) {
-            const url = window.URL.createObjectURL(file.blob);
-            const downloadTag = document.createElement("a");
-            downloadTag.href = url;
-            downloadTag.download = file.name;
-            downloadTag.click();
+            for (const file of files) {
+                const url = window.URL.createObjectURL(file.blob);
+                const downloadTag = document.createElement("a");
+                downloadTag.href = url;
+                downloadTag.download = file.name;
+                downloadTag.click();
+            }
         }
     }
 

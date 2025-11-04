@@ -92,7 +92,7 @@ export class DataRecorderService {
         const database = await exportDB(appDB, { progressCallback });
         const name = `${new Date().toDateTimeStringFormat()} - database.json`;
 
-        this.createDownload(database, name);
+        this.createDownload([{ blob: database, name }]);
     }
 
     async exportSessionToJson(sessionId: number): Promise<void> {
@@ -101,15 +101,20 @@ export class DataRecorderService {
             this.getSessionData(sessionId),
         ]);
 
+        const files: Array<{ blob: Blob; name: string }> = [
+            {
+                blob: new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" }),
+                name: `${new Date(sessionId).toDateTimeStringFormat()} - session`,
+            },
+        ];
+
         if (deltaTimes.length > 0) {
             const blob = new Blob([JSON.stringify(deltaTimes)], { type: "application/json" });
             const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes`;
-            this.createDownload(blob, name);
+            files.push({ blob, name });
         }
 
-        const blob = new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" });
-        const name = `${new Date(sessionId).toDateTimeStringFormat()} - session`;
-        this.createDownload(blob, name);
+        this.createDownload(files);
     }
 
     async exportSessionToTcx(sessionId: number): Promise<void> {
@@ -128,7 +133,7 @@ export class DataRecorderService {
             },
         );
         const name = `${new Date(sessionId).toDateTimeStringFormat()} - session.tcx`;
-        this.createDownload(blob, name);
+        this.createDownload([{ blob, name }]);
     }
 
     async exportSessionToCsv(sessionId: number): Promise<void> {
@@ -191,7 +196,7 @@ export class DataRecorderService {
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const name = `${new Date(sessionId).toDateTimeStringFormat()} - session.csv`;
-        this.createDownload(blob, name);
+        this.createDownload([{ blob, name }]);
     }
 
     getSessionSummaries$(): Observable<Array<ISessionSummary>> {
@@ -280,13 +285,12 @@ export class DataRecorderService {
         this.currentSessionId = Date.now();
     }
 
-    private async createDownload(blob: Blob, name: string): Promise<void> {
-        const mimeType = this.getMimeTypeFromFileName(name);
-        const file = new File([blob], name, { type: mimeType });
-
-        const shareData = {
-            title: name,
-            files: [file],
+    private async createDownload(files: Array<{ blob: Blob; name: string }>): Promise<void> {
+        const shareData: ShareData = {
+            files: files.map(
+                (file: { blob: Blob; name: string }): File =>
+                    new File([file.blob], file.name, { type: this.getMimeTypeFromFileName(file.name) }),
+            ),
         };
 
         if (navigator.canShare(shareData)) {
@@ -299,11 +303,13 @@ export class DataRecorderService {
             }
         }
 
-        const url = window.URL.createObjectURL(blob);
-        const downloadTag = document.createElement("a");
-        downloadTag.href = url;
-        downloadTag.download = name;
-        downloadTag.click();
+        for (const file of files) {
+            const url = window.URL.createObjectURL(file.blob);
+            const downloadTag = document.createElement("a");
+            downloadTag.href = url;
+            downloadTag.download = file.name;
+            downloadTag.click();
+        }
     }
 
     private getMimeTypeFromFileName(fileName: string): string {

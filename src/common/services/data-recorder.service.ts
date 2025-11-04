@@ -313,8 +313,22 @@ export class DataRecorderService {
             const downloadTag = document.createElement("a");
             downloadTag.href = url;
             downloadTag.download = file.name;
+            downloadTag.style.display = "none";
+            document.body.appendChild(downloadTag);
             downloadTag.click();
-            window.URL.revokeObjectURL(url);
+
+            // defer cleanup to allow download to start
+            setTimeout((): void => {
+                document.body.removeChild(downloadTag);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+
+            // add delay between multiple downloads
+            if (files.length > 1) {
+                await new Promise((resolve: (value: void) => void): void => {
+                    setTimeout(resolve, 200);
+                });
+            }
         }
     }
 

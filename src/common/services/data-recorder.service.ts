@@ -194,7 +194,7 @@ export class DataRecorderService {
 
         const csvContent = `${headers}\n${csvBody}`;
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const blob = new Blob([csvContent], { type: "text/csv" });
         const name = `${new Date(sessionId).toDateTimeStringFormat()} - session.csv`;
         this.createDownload([{ blob, name }]);
     }
@@ -313,7 +313,7 @@ export class DataRecorderService {
             const downloadTag = document.createElement("a");
             downloadTag.href = url;
             downloadTag.download = file.name;
-            downloadTag.click();
+            window.open(url, "_blank");
             window.URL.revokeObjectURL(url);
         }
     }

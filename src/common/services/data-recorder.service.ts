@@ -315,6 +315,7 @@ export class DataRecorderService {
             downloadTag.download = file.name;
             downloadTag.click();
             window.URL.revokeObjectURL(url);
+            downloadTag.remove();
         }
     }
 

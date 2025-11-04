@@ -286,27 +286,27 @@ export class DataRecorderService {
     }
 
     private async createDownload(files: Array<{ blob: Blob; name: string }>): Promise<void> {
-        const shareData: ShareData = {
-            files: files.map(
-                (file: { blob: Blob; name: string }): File =>
-                    new File([file.blob], file.name, { type: file.blob.type }),
-            ),
-        };
+        // const shareData: ShareData = {
+        //     files: files.map(
+        //         (file: { blob: Blob; name: string }): File =>
+        //             new File([file.blob], file.name, { type: file.blob.type }),
+        //     ),
+        // };
 
-        if (navigator?.canShare(shareData)) {
-            try {
-                await navigator.share(shareData);
+        // if (navigator?.canShare(shareData)) {
+        //     try {
+        //         await navigator.share(shareData);
 
-                return;
-            } catch (error) {
-                if (
-                    error instanceof DOMException &&
-                    !["AbortError", "NotAllowedError"].includes(error.name)
-                ) {
-                    console.error("Error sharing file:", error.name);
-                }
-            }
-        }
+        //         return;
+        //     } catch (error) {
+        //         if (
+        //             error instanceof DOMException &&
+        //             !["AbortError", "NotAllowedError"].includes(error.name)
+        //         ) {
+        //             console.error("Error sharing file:", error.name);
+        //         }
+        //     }
+        // }
 
         for (const file of files) {
             const url = window.URL.createObjectURL(file.blob);

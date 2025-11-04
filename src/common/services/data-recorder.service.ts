@@ -90,7 +90,7 @@ export class DataRecorderService {
 
     async export(progressCallback?: (progress: ExportProgress) => boolean): Promise<void> {
         const database = await exportDB(appDB, { progressCallback });
-        const name = `${new Date().toDateTimeStringFormat()} - database.json`;
+        const name = `${new Date().toDateTimeStringFormat()} - database.txt`;
 
         this.createDownload([{ blob: database, name }]);
     }
@@ -104,13 +104,13 @@ export class DataRecorderService {
         const files: Array<{ blob: Blob; name: string }> = [
             {
                 blob: new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" }),
-                name: `${new Date(sessionId).toDateTimeStringFormat()} - session.json`,
+                name: `${new Date(sessionId).toDateTimeStringFormat()} - session.txt`,
             },
         ];
 
         if (deltaTimes.length > 0) {
             const blob = new Blob([JSON.stringify(deltaTimes)], { type: "application/json" });
-            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.json`;
+            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.txt`;
             files.push({ blob, name });
         }
 
@@ -288,11 +288,7 @@ export class DataRecorderService {
     private async createDownload(files: Array<{ blob: Blob; name: string }>): Promise<void> {
         const shareData: ShareData = {
             files: files.map((file: { blob: Blob; name: string }): File => {
-                // use generic MIME types for Web Share API compatibility
-                // JSON and TCX files are treated as plain text for sharing
-                const mimeType = this.getShareMimeType(file.name);
-
-                return new File([file.blob], file.name, { type: mimeType });
+                return new File([file.blob], file.name, { type: "text/json" });
             }),
         };
 
@@ -311,46 +307,13 @@ export class DataRecorderService {
             }
         }
 
-        // fallback: direct download
         for (const file of files) {
             const url = window.URL.createObjectURL(file.blob);
             const downloadTag = document.createElement("a");
             downloadTag.href = url;
             downloadTag.download = file.name;
-            downloadTag.style.display = "none";
-            document.body.appendChild(downloadTag);
             downloadTag.click();
-
-            // defer cleanup to allow download to start
-            setTimeout((): void => {
-                document.body.removeChild(downloadTag);
-                window.URL.revokeObjectURL(url);
-            }, 100);
-
-            // add delay between multiple downloads
-            if (files.length > 1) {
-                await new Promise((resolve: (value: void) => void): void => {
-                    setTimeout(resolve, 200);
-                });
-            }
-        }
-    }
-
-    private getShareMimeType(fileName: string): string {
-        const extension = fileName.split(".").pop()?.toLowerCase();
-
-        switch (extension) {
-            case "json":
-                // use text/plain for Web Share API compatibility
-                // Android will still recognize it as a JSON file by extension
-                return "text/plain";
-            case "csv":
-                return "text/csv";
-            case "tcx":
-                // use text/xml for Web Share API compatibility
-                return "text/xml";
-            default:
-                return "application/octet-stream";
+            window.URL.revokeObjectURL(url);
         }
     }
 

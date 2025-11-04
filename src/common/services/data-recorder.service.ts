@@ -280,7 +280,7 @@ export class DataRecorderService {
         this.currentSessionId = Date.now();
     }
 
-    private createDownload(blob: Blob, name: string): void {
+    private async createDownload(blob: Blob, name: string): Promise<void> {
         console.log("Web share available:", navigator.share);
 
         const mimeType = this.getMimeTypeFromFileName(name);
@@ -292,7 +292,7 @@ export class DataRecorderService {
         };
 
         if (navigator.canShare(shareData)) {
-            navigator.share(shareData);
+            await navigator.share(shareData);
 
             return;
         }

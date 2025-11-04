@@ -104,13 +104,13 @@ export class DataRecorderService {
         const files: Array<{ blob: Blob; name: string }> = [
             {
                 blob: new Blob([JSON.stringify(rowingSessionData)], { type: "application/json" }),
-                name: `${new Date(sessionId).toDateTimeStringFormat()} - session`,
+                name: `${new Date(sessionId).toDateTimeStringFormat()} - session.json`,
             },
         ];
 
         if (deltaTimes.length > 0) {
             const blob = new Blob([JSON.stringify(deltaTimes)], { type: "application/json" });
-            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes`;
+            const name = `${new Date(sessionId).toDateTimeStringFormat()} - deltaTimes.json`;
             files.push({ blob, name });
         }
 
@@ -289,7 +289,7 @@ export class DataRecorderService {
         const shareData: ShareData = {
             files: files.map(
                 (file: { blob: Blob; name: string }): File =>
-                    new File([file.blob], file.name, { type: this.getMimeTypeFromFileName(file.name) }),
+                    new File([file.blob], file.name, { type: file.blob.type }),
             ),
         };
 
@@ -315,22 +315,6 @@ export class DataRecorderService {
             downloadTag.download = file.name;
             downloadTag.click();
             window.URL.revokeObjectURL(url);
-            downloadTag.remove();
-        }
-    }
-
-    private getMimeTypeFromFileName(fileName: string): string {
-        const extension = fileName.split(".").pop()?.toLowerCase();
-
-        switch (extension) {
-            case "json":
-                return "application/json";
-            case "csv":
-                return "text/csv";
-            case "tcx":
-                return "application/vnd.garmin.tcx+xml";
-            default:
-                return "application/octet-stream";
         }
     }
 

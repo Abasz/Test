@@ -17,24 +17,6 @@ import { CustomMediaMatcher } from "./common/utils/media-matcher-override";
 // initialize console DOM logger for development debugging
 ConsoleDomLogger.getInstance().initialize();
 
-console.log((window as any).cordova);
-console.log((window as any).capacitor);
-console.log(window);
-console.log(navigator);
-console.log(
-    Object.keys(window).filter(
-        (key: string): boolean =>
-            !key.startsWith("on") && !key.startsWith("scroll") && !key.startsWith("screen"),
-    ),
-);
-
-console.log(
-    Object.keys(window.document).filter(
-        (key: string): boolean =>
-            !key.startsWith("on") && !key.startsWith("scroll") && !key.startsWith("screen"),
-    ),
-);
-
 bootstrapApplication(AppComponent, {
     providers: [
         provideZonelessChangeDetection(),

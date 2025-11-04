@@ -281,8 +281,6 @@ export class DataRecorderService {
     }
 
     private async createDownload(blob: Blob, name: string): Promise<void> {
-        console.log("Web share available:", navigator.share);
-
         const mimeType = this.getMimeTypeFromFileName(name);
         const file = new File([blob], name, { type: mimeType });
 
@@ -292,9 +290,13 @@ export class DataRecorderService {
         };
 
         if (navigator.canShare(shareData)) {
-            await navigator.share(shareData);
+            try {
+                await navigator.share(shareData);
 
-            return;
+                return;
+            } catch (error) {
+                console.error("Error sharing file:", error);
+            }
         }
 
         const url = window.URL.createObjectURL(blob);

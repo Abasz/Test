@@ -283,32 +283,40 @@ export class DataRecorderService {
     private createDownload(blob: Blob, name: string): void {
         console.log("Web share available:", navigator.share);
 
-        if (navigator.share) {
-            console.log("Using Web Share API to share the file");
-            const file = new File([blob], name, { type: "application/json" });
+        const mimeType = this.getMimeTypeFromFileName(name);
+        const file = new File([blob], name, { type: mimeType });
 
-            navigator.share({
-                title: "My File",
-                files: [file],
-            });
+        const shareData = {
+            title: name,
+            files: [file],
+        };
+
+        if (navigator.canShare(shareData)) {
+            navigator.share(shareData);
 
             return;
         }
-
-        console.log("Trygin fallback readasdaturl");
-        const reader = new FileReader();
-        reader.onload = (): void => {
-            const dataUrl = reader.result as string;
-            console.log("Opening data URL in new window/tab");
-            window.open(dataUrl, "_blank");
-        };
-        reader.readAsDataURL(blob);
 
         const url = window.URL.createObjectURL(blob);
         const downloadTag = document.createElement("a");
         downloadTag.href = url;
         downloadTag.download = name;
         downloadTag.click();
+    }
+
+    private getMimeTypeFromFileName(fileName: string): string {
+        const extension = fileName.split(".").pop()?.toLowerCase();
+
+        switch (extension) {
+            case "json":
+                return "application/json";
+            case "csv":
+                return "text/csv";
+            case "tcx":
+                return "application/vnd.garmin.tcx+xml";
+            default:
+                return "application/octet-stream";
+        }
     }
 
     private async getDeltaTimes(sessionId: number): Promise<Array<number>> {

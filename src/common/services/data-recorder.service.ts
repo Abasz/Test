@@ -287,10 +287,13 @@ export class DataRecorderService {
 
     private async createDownload(files: Array<{ blob: Blob; name: string }>): Promise<void> {
         const shareData: ShareData = {
-            files: files.map(
-                (file: { blob: Blob; name: string }): File =>
-                    new File([file.blob], file.name, { type: file.blob.type }),
-            ),
+            files: files.map((file: { blob: Blob; name: string }): File => {
+                // use generic MIME types for Web Share API compatibility
+                // JSON and TCX files are treated as plain text for sharing
+                const mimeType = this.getShareMimeType(file.name);
+
+                return new File([file.blob], file.name, { type: mimeType });
+            }),
         };
 
         if (navigator?.canShare(shareData)) {
@@ -308,6 +311,7 @@ export class DataRecorderService {
             }
         }
 
+        // fallback: direct download
         for (const file of files) {
             const url = window.URL.createObjectURL(file.blob);
             const downloadTag = document.createElement("a");
@@ -329,6 +333,24 @@ export class DataRecorderService {
                     setTimeout(resolve, 200);
                 });
             }
+        }
+    }
+
+    private getShareMimeType(fileName: string): string {
+        const extension = fileName.split(".").pop()?.toLowerCase();
+
+        switch (extension) {
+            case "json":
+                // use text/plain for Web Share API compatibility
+                // Android will still recognize it as a JSON file by extension
+                return "text/plain";
+            case "csv":
+                return "text/csv";
+            case "tcx":
+                // use text/xml for Web Share API compatibility
+                return "text/xml";
+            default:
+                return "application/octet-stream";
         }
     }
 

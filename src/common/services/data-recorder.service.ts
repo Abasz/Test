@@ -306,14 +306,14 @@ export class DataRecorderService {
                     console.error("Error sharing file:", error.name);
                 }
             }
+        }
 
-            for (const file of files) {
-                const url = window.URL.createObjectURL(file.blob);
-                const downloadTag = document.createElement("a");
-                downloadTag.href = url;
-                downloadTag.download = file.name;
-                downloadTag.click();
-            }
+        for (const file of files) {
+            const url = window.URL.createObjectURL(file.blob);
+            const downloadTag = document.createElement("a");
+            downloadTag.href = url;
+            downloadTag.download = file.name;
+            downloadTag.click();
         }
     }
 

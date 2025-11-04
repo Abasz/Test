@@ -28,6 +28,13 @@ console.log(
     ),
 );
 
+console.log(
+    Object.keys(window.document).filter(
+        (key: string): boolean =>
+            !key.startsWith("on") && !key.startsWith("scroll") && !key.startsWith("screen"),
+    ),
+);
+
 bootstrapApplication(AppComponent, {
     providers: [
         provideZonelessChangeDetection(),

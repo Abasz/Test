@@ -308,15 +308,15 @@ export class DataRecorderService {
         //     }
         // }
 
-        for (const file of files) {
-            const url = window.URL.createObjectURL(file.blob);
-            const downloadTag = document.createElement("a");
-            downloadTag.href = url;
-            downloadTag.download = file.name;
-            // window.open(url, "_blank");
-            downloadTag.click();
-            window.URL.revokeObjectURL(url);
-        }
+        // for (const file of files) {
+        const url = window.URL.createObjectURL(files[0].blob);
+        const downloadTag = document.createElement("a");
+        downloadTag.href = url;
+        downloadTag.download = files[0].name;
+        // window.open(url, "_blank");
+        downloadTag.click();
+        window.URL.revokeObjectURL(url);
+        // }
     }
 
     private async getDeltaTimes(sessionId: number): Promise<Array<number>> {

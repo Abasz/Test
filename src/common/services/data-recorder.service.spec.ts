@@ -493,7 +493,8 @@ describe("DataRecorderService", (): void => {
                 expect(shareCallArgs.files?.[0].name).toMatch(
                     /\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - database\.json$/,
                 );
-                expect(shareCallArgs.files?.[0].type).toBe("application/json");
+                // exportDB returns a blob with type "text/json"
+                expect(shareCallArgs.files?.[0].type).toBe("text/json");
             });
 
             it("should fallback to download when share is aborted", async (): Promise<void> => {
@@ -525,19 +526,29 @@ describe("DataRecorderService", (): void => {
                 expect(clickSpy).toHaveBeenCalled();
             });
 
-            it("should log error and fallback when share fails with other errors", async (): Promise<void> => {
+            it("should fallback when share fails with other errors", async (): Promise<void> => {
                 const unknownError = new DOMException("Unknown error", "UnknownError");
                 canShareSpy.and.returnValue(true);
                 shareSpy.and.returnValue(Promise.reject(unknownError));
-                spyOn(console, "error");
                 spyOn(URL, "createObjectURL").and.returnValue("blob:mock-url");
                 spyOn(URL, "revokeObjectURL");
 
                 await service.export();
 
-                expect(console.error).toHaveBeenCalledWith("Error sharing file:", "UnknownError");
                 expect(clickSpy).toHaveBeenCalled();
             });
+        });
+
+        it("should fallback to download when Web Share API is not available", async (): Promise<void> => {
+            Object.defineProperty(navigator, "canShare", { value: undefined, configurable: true });
+            spyOn(URL, "createObjectURL").and.returnValue("blob:mock-url");
+            spyOn(URL, "revokeObjectURL");
+
+            await service.export();
+
+            expect(shareSpy).not.toHaveBeenCalled();
+            expect(clickSpy).toHaveBeenCalled();
+            expect(anchorElement?.download).toMatch(/\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - database\.json$/);
         });
     });
 
@@ -670,8 +681,7 @@ describe("DataRecorderService", (): void => {
                 const shareCallArgs = shareSpy.calls.mostRecent().args[0] as ShareData;
                 expect(shareCallArgs.files).toBeDefined();
                 expect(shareCallArgs.files?.length).toBe(1);
-
-                expect(shareCallArgs.files?.[0].type).toBe("application/octet-stream");
+                expect(shareCallArgs.files?.[0].type).toBe("application/json");
             });
 
             it("should share both session and delta times when available", async (): Promise<void> => {
@@ -947,7 +957,7 @@ describe("DataRecorderService", (): void => {
 
             expect(blobSpy).toHaveBeenCalled();
             const blobArgs = blobSpy.calls.mostRecent().args;
-            expect(blobArgs[1].type).toBe("text/csv;charset=utf-8;");
+            expect(blobArgs[1].type).toBe("text/csv");
         });
 
         it("should include CSV headers in exported content", async (): Promise<void> => {

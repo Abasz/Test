@@ -293,7 +293,7 @@ export class DataRecorderService {
             ),
         };
 
-        if (navigator?.canShare(shareData)) {
+        if (navigator.canShare && navigator.canShare(shareData)) {
             try {
                 await navigator.share(shareData);
 

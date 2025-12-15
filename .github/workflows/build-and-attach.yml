@@ -184,6 +184,15 @@ jobs:
           mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
           mv dist/visualize-delta-times visualize-delta-times-linux-x64
 
+      - name: ⬆️ Upload artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}-linux
+          path: |
+            tools/${{ matrix.asset_name }}
+            tools/visualize-delta-times-linux-x64
+
       - name: 📦 Prepare release asset (Windows)
         if: runner.os == 'Windows'
         working-directory: tools
@@ -192,6 +201,15 @@ jobs:
           mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
           mv dist/visualize-delta-times.exe visualize-delta-times-windows-x64.exe
 
+      - name: ⬆️ Upload artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}-windows
+          path: |
+            tools/${{ matrix.asset_name }}
+            tools/visualize-delta-times-windows-x64.exe
+
       - name: 📦 Prepare release asset (macOS .app -> tar.gz)
         if: runner.os == 'macOS'
         working-directory: tools
@@ -199,3 +217,12 @@ jobs:
           # macOS produces a <name>.app directory — package it as a tar.gz for upload
           tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
           tar -C dist -czf visualize-delta-times-macos-x64.tar.gz "visualize-delta-times.app"
+
+      - name: ⬆️ Upload artifacts (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}-macos
+          path: |
+            tools/${{ matrix.asset_name }}.tar.gz
+            tools/visualize-delta-times-macos-x64.tar.gz

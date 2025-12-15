@@ -199,13 +199,3 @@ jobs:
           # macOS produces a <name>.app directory — package it as a tar.gz for upload
           tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
           tar -C dist -czf visualize-delta-times-macos-x64.tar.gz "visualize-delta-times.app"
-
-      - name: 📎 Upload GUI executable to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            tools/${{ matrix.asset_name }}*
-            tools/visualize-delta-times-*
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

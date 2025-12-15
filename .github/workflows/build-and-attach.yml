@@ -1,0 +1,298 @@
+name: Build & Attach Firmware to Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      PIO_CLI_CALLER: github-actions
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 🔧 Set up PlatformIO Core
+        run: pip install -U platformio esptool
+
+      - name:  Build binaries for all rowers and board profiles
+        run: |
+          echo "🔨 Building binaries"
+          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+          echo
+          echo "Environments:"
+          mapfile -t env_array <<< "$environments"
+          for env in "${env_array[@]}"; do
+            echo "- ${env}"
+          done
+          echo
+          pio run $(echo "${environments}" | sed 's/^/-e /' | paste -sd ' ' -)
+
+      - name: 📦 Prepare zipped firmware binaries
+        run: |
+          set -eo pipefail
+          mkdir -p release_assets
+          shopt -s nullglob
+
+          for dir in "${{github.workspace}}/.pio/build"/*/; do
+            environmentName=$(basename "${dir}")
+            echo "Processing environment: ${environmentName}"
+
+            # Require the canonical firmware file produced by PlatformIO
+            binfile="${dir}firmware.bin"
+            if [ ! -f "${binfile}" ]; then
+              echo "ERROR: expected firmware binary '${binfile}' not found for environment ${environmentName}"
+              exit 1
+            fi
+            echo "Using firmware: ${binfile}"
+
+            chip_id=$(esptool image_info "${binfile}" 2>&1 | sed -nE 's/.*Chip ID:.*\(([^)]+)\).*/\1/p')
+
+            # sanitize chip_id to safe filename chars
+            chip_id_safe=$(echo "${chip_id}" | sed -E 's/[^A-Za-z0-9._]//g')
+
+            zipname="${{github.workspace}}/release_assets/firmware_${environmentName}_${chip_id_safe}.zip"
+            echo "Creating zip: ${zipname} (all .bin files in ${dir})"
+            # include all .bin files from this environment folder
+            find "${dir}" -maxdepth 1 -type f -name '*.bin' -print | zip -j -q "${zipname}" -@
+          done
+
+      - name: 📎 Upload firmware binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{github.workspace}}/release_assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-gui-executables:
+    runs-on: ${{ matrix.os }}
+    needs: build-and-upload
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: esptool-gui
+            asset_name: esptool-gui-linux-x64
+          - os: windows-latest
+            platform: windows
+            artifact_name: esptool-gui.exe
+            asset_name: esptool-gui-windows-x64.exe
+          - os: macos-latest
+            platform: macos
+            artifact_name: esptool-gui
+            asset_name: esptool-gui-macos-x64
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 📦 Install dependencies
+        run: |
+          pip install pyinstaller pyserial esptool certifi matplotlib numpy pyperclipimg Pillow
+
+      # - name: 📦 Install platform-specific dependencies (Windows)
+      #   if: runner.os == 'Windows'
+      #   run: |
+      #     pip install pywin32
+
+      # - name: 📦 Install platform-specific dependencies (macOS)
+      #   if: runner.os == 'macOS'
+      #   run: |
+      #     pip install pyobjc-framework-quartz
+
+      - name: 🏗️ Build executable with PyInstaller (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools
+        run: |
+          ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n')
+          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"
+          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json:./esptool/targets/stub_flasher/2/"
+
+          pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" \
+            --icon ESPTools-GUI.ico \
+            --hidden-import serial.tools.list_ports \
+            --hidden-import esptool \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.scrolledtext \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            --add-data "./ESPTools-GUI.ico:." \
+            --add-data "${ESPTOOL_TARGETS_1}" \
+            --add-data "${ESPTOOL_TARGETS_2}" \
+            esptool_gui.py
+        shell: bash
+
+      - name: 🏗️ Build visualize-delta-times with PyInstaller (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools
+        run: |
+          pyinstaller --onefile --windowed --name "visualize-delta-times" \
+            --hidden-import matplotlib \
+            --hidden-import matplotlib.backends.backend_tkagg \
+            --hidden-import numpy \
+            --hidden-import pyperclip \
+            --hidden-import pyperclipimg \
+            --hidden-import PIL \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            --hidden-import tkinter.scrolledtext \
+            visualize_delta_times.py
+        shell: bash
+
+      - name: 🏗️ Build executable with PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tools
+        shell: pwsh
+        run: |
+         $ESPTOOL_LOCATION = $(pip show esptool | findstr '^Location: ').Substring(10).Trim()
+          $ESPTOOL_TARGETS_1 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\1\*.json;./esptool/targets/stub_flasher/1/"
+          $ESPTOOL_TARGETS_2 = "${ESPTOOL_LOCATION}\esptool\targets\stub_flasher\2\*.json;./esptool/targets/stub_flasher/2/"
+
+          pyinstaller --onefile --windowed --name "${{ matrix.artifact_name }}" `
+            --icon ESPTools-GUI.ico `
+            --hidden-import serial.tools.list_ports `
+            --hidden-import esptool `
+            --hidden-import tkinter `
+            --hidden-import tkinter.ttk `
+            --hidden-import tkinter.scrolledtext `
+            --hidden-import tkinter.filedialog `
+            --hidden-import tkinter.messagebox `
+            --add-data ".\\ESPTools-GUI.ico;." `
+            --add-data "$ESPTOOL_TARGETS_1" `
+            --add-data "$ESPTOOL_TARGETS_2" `
+            esptool_gui.py
+
+      - name: 🏗️ Build visualize-delta-times with PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tools
+        shell: pwsh
+        run: |
+          pyinstaller --onefile --windowed --name "visualize-delta-times" `
+            --hidden-import matplotlib `
+            --hidden-import matplotlib.backends.backend_tkagg `
+            --hidden-import numpy `
+            --hidden-import pyperclip `
+            --hidden-import pyperclipimg `
+            --hidden-import PIL `
+            --hidden-import win32clipboard `
+            --hidden-import tkinter `
+            --hidden-import tkinter.ttk `
+            --hidden-import tkinter.filedialog `
+            --hidden-import tkinter.messagebox `
+            --hidden-import tkinter.scrolledtext `
+            visualize_delta_times.py
+
+      - name: 🏗️ Build executable with PyInstaller (macOS .app bundle)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # On macOS create an onedir .app bundle instead of --onefile
+          pip install pillow
+          ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n') || true
+          ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"
+          ESPTOOL_TARGETS_2="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/2/*.json:./esptool/targets/stub_flasher/2/"
+
+          pyinstaller --windowed --onedir --name "${{ matrix.artifact_name }}" \
+            --icon ESPTools-GUI.ico \
+            --hidden-import serial.tools.list_ports \
+            --hidden-import esptool \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.scrolledtext \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            --add-data "./ESPTools-GUI.ico:." \
+            --add-data "${ESPTOOL_TARGETS_1}" \
+            --add-data "${ESPTOOL_TARGETS_2}" \
+            esptool_gui.py
+        shell: bash
+
+      - name: 🏗️ Build visualize-delta-times with PyInstaller (macOS .app bundle)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # On macOS create an onedir .app bundle instead of --onefile
+          pyinstaller --windowed --onedir --name "visualize-delta-times" \
+            --hidden-import matplotlib \
+            --hidden-import matplotlib.backends.backend_tkagg \
+            --hidden-import numpy \
+            --hidden-import pyperclip \
+            --hidden-import pyperclipimg \
+            --hidden-import PIL \
+            --hidden-import Quartz \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            --hidden-import tkinter.scrolledtext \
+            visualize_delta_times.py
+        shell: bash
+
+      - name: 📦 Prepare release asset (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools
+        run: |
+          chmod +x dist/${{ matrix.artifact_name }}
+          chmod +x dist/visualize-delta-times
+          mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          mv dist/visualize-delta-times visualize-delta-times-linux-x64
+
+      - name: 📦 Prepare release asset (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tools
+        shell: bash
+        run: |
+          mv dist/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          mv dist/visualize-delta-times.exe visualize-delta-times-windows-x64.exe
+
+      - name: 📦 Prepare release asset (macOS .app -> tar.gz)
+        if: runner.os == 'macOS'
+        working-directory: tools
+        run: |
+          # macOS produces a <name>.app directory — package it as a tar.gz for upload
+          tar -C dist -czf ${{ matrix.asset_name }}.tar.gz "${{ matrix.artifact_name }}.app"
+          tar -C dist -czf visualize-delta-times-macos-x64.tar.gz "visualize-delta-times.app"
+
+      - name: 📎 Upload GUI executable to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            tools/${{ matrix.asset_name }}*
+            tools/visualize-delta-times-*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-downstream:
+    runs-on: ubuntu-latest
+    needs: [build-and-upload, build-gui-executables]
+    if: success()
+    
+    steps:
+      - name: 🚀 Dispatch WebGUI Build
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          repository: Abasz/ESPRowingMonitor-WebGUI
+          event-type: esp-rowing-monitor-release
+          client-payload: '{"tag": "${{ github.ref_name }}"}'

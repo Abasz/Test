@@ -1,0 +1,11 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+set -o pipefail
+
+rowerProfile="$1"
+
+if [[ ! -f "@CMAKE_CURRENT_BINARY_DIR@/${rowerProfile}.environment" ]]; then
+    @CMAKE_COMMAND@ -E cmake_echo_color "[  0%] New rower profile, cleaning files..."
+    @CMAKE_COMMAND@ -E rm -f '$<SHELL_PATH:$<TARGET_FILE:e2e-test>>' '$<JOIN:$<TARGET_OBJECTS:e2e-test>,' '>' "@CMAKE_CURRENT_BINARY_DIR@/"*.environment
+fi

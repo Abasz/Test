@@ -2,6 +2,7 @@ import { DestroyRef, Injectable } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import {
     combineLatest,
+    distinctUntilChanged,
     filter,
     map,
     merge,
@@ -158,33 +159,41 @@ export class MetricsService {
                 this.dataRecorder.addDeltaTimes(deltaTimes);
             });
 
+        this.ergConnectionService
+            .connectionStatus$()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((connectionStatus: IErgConnectionStatus): void => {
+                if (connectionStatus.deviceName && connectionStatus.deviceName.length > 0) {
+                    this.dataRecorder.addConnectedDevice(connectionStatus.deviceName);
+                }
+            });
+
         this.allMetrics$
             .pipe(
-                withLatestFrom(this.heartRateData$, this.ergConnectionService.connectionStatus$()),
+                withLatestFrom(this.heartRateData$),
                 filter(
-                    ([calculatedMetrics]: [
-                        ICalculatedMetrics,
-                        IHeartRate | undefined,
-                        IErgConnectionStatus,
-                    ]): boolean => calculatedMetrics.strokeCount > 0 || calculatedMetrics.distance > 0,
+                    ([calculatedMetrics]: [ICalculatedMetrics, IHeartRate | undefined]): boolean =>
+                        calculatedMetrics.strokeCount > 0 || calculatedMetrics.distance > 0,
+                ),
+                distinctUntilChanged(
+                    (
+                        [previousMetrics]: [ICalculatedMetrics, IHeartRate | undefined],
+                        [currentMetrics]: [ICalculatedMetrics, IHeartRate | undefined],
+                    ): boolean => {
+                        return (
+                            previousMetrics.distance === currentMetrics.distance &&
+                            previousMetrics.strokeCount === currentMetrics.strokeCount
+                        );
+                    },
                 ),
                 takeUntilDestroyed(this.destroyRef),
             )
-            .subscribe(
-                ([calculatedMetrics, heartRate, connectionStatus]: [
-                    ICalculatedMetrics,
-                    IHeartRate | undefined,
-                    IErgConnectionStatus,
-                ]): void => {
-                    this.dataRecorder.addSessionData({
-                        ...calculatedMetrics,
-                        heartRate,
-                    });
-                    if (connectionStatus.deviceName && connectionStatus.deviceName.length > 0) {
-                        this.dataRecorder.addConnectedDevice(connectionStatus.deviceName);
-                    }
-                },
-            );
+            .subscribe(([metricsCurrent, heartRate]: [ICalculatedMetrics, IHeartRate | undefined]): void => {
+                this.dataRecorder.addSessionData({
+                    ...metricsCurrent,
+                    heartRate,
+                });
+            });
     }
 
     private setupMetricStream$(): Observable<ICalculatedMetrics> {

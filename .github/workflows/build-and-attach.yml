@@ -9,10 +9,8 @@ permissions:
   contents: write
 
 jobs:
-
   build-gui-executables:
     runs-on: ${{ matrix.os }}
-    needs: build-and-upload
     strategy:
       matrix:
         include:

@@ -15,7 +15,7 @@ Features:
 - Stroke detection: identify missed or duplicate strokes
 
 Usage:
-  python visualize_delta_times.py
+  python calibration-helper-GUI.py
   
 Controls (Delta Times):
 - Zoom: Click the magnifying glass icon, then drag a rectangle to zoom
@@ -516,11 +516,11 @@ def detect_stroke_anomalies(
 
 class DataVisualizer:
     """Main application window for visualizing ESP Rowing Monitor data."""
-    
+
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("ESP Rowing Monitor Data Visualizer")
-        self.root.iconbitmap(os.path.join(sys._MEIPASS, "visualize_delta_times.ico")) # type: ignore[arg-type]
+        self.root.iconbitmap(os.path.join(sys._MEIPASS, "calibration-helper-GUI.ico")) # type: ignore[arg-type]
         self.root.geometry("1400x900")
         
         # Multi-file storage

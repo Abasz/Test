@@ -171,26 +171,26 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: tools
         run: |
-          chmod +x dist/esptool-gui
-          chmod +x dist/calibration-helper-GUI
-          mv dist/esptool-gui esptool-gui-linux-x64
-          mv dist/calibration-helper-GUI calibration-helper-GUI-linux-x64
+          chmod +x ESPTools-GUI/dist/esptool-gui
+          chmod +x calibration-helper/dist/calibration-helper-GUI
+          mv ESPTools-GUI/dist/esptool-gui esptool-gui-linux-x64
+          mv calibration-helper/dist/calibration-helper-GUI calibration-helper-GUI-linux-x64
 
       - name: 📦 Prepare release assets (Windows)
         if: runner.os == 'Windows'
         working-directory: tools
         shell: bash
         run: |
-          mv dist/esptool-gui.exe esptool-gui-windows-x64.exe
-          mv dist/calibration-helper-GUI.exe calibration-helper-GUI-windows-x64.exe
+          mv ESPTools-GUI/dist/esptool-gui.exe esptool-gui-windows-x64.exe
+          mv calibration-helper/dist/calibration-helper-GUI.exe calibration-helper-GUI-windows-x64.exe
 
       - name: 📦 Prepare release assets (macOS .app -> tar.gz)
         if: runner.os == 'macOS'
         working-directory: tools
         run: |
           # macOS produces .app directories — package each as a tar.gz for upload
-          tar -C dist -czf esptool-gui-macos-x64.tar.gz "esptool-gui.app"
-          tar -C dist -czf calibration-helper-GUI-macos-x64.tar.gz "calibration-helper-GUI.app"
+          tar -C dist -czf esptool-gui-macos-x64.tar.gz "ESPTools-GUI/esptool-gui.app"
+          tar -C dist -czf calibration-helper-GUI-macos-x64.tar.gz "calibration-helper/calibration-helper-GUI.app"
 
       - name: 📎 Upload executables to release
         uses: softprops/action-gh-release@v2

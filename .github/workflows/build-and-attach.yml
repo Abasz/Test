@@ -36,7 +36,7 @@ jobs:
 
       - name: 🏗️ Build esptool-gui with PyInstaller (Linux)
         if: runner.os == 'Linux'
-        working-directory: tools
+        working-directory: tools/ESPTools-GUI
         run: |
           ESPTOOL_LOCATION=$(pip show esptool | grep '^Location: ' | cut -c11- | tr -d '\n')
           ESPTOOL_TARGETS_1="${ESPTOOL_LOCATION}/esptool/targets/stub_flasher/1/*.json:./esptool/targets/stub_flasher/1/"
@@ -57,12 +57,12 @@ jobs:
             esptool_gui.py
         shell: bash
 
-      - name: 🏗️ Build visualize-delta-times with PyInstaller (Linux)
+      - name: 🏗️ Build calibration-helper-GUI with PyInstaller (Linux)
         if: runner.os == 'Linux'
-        working-directory: tools
+        working-directory: tools/calibration-helper-GUI
         run: |
-          pyinstaller --onefile --windowed --name "visualize-delta-times" \
-            --icon visualize_delta_times.ico \
+          pyinstaller --onefile --windowed --name "calibration-helper-GUI" \
+            --icon calibration-helper-GUI.ico \
             --hidden-import matplotlib \
             --hidden-import matplotlib.backends.backend_tkagg \
             --hidden-import numpy \
@@ -73,13 +73,13 @@ jobs:
             --hidden-import tkinter.filedialog \
             --hidden-import tkinter.messagebox \
             --hidden-import tkinter.scrolledtext \
-            --add-data "./visualize_delta_times.ico:." \
-            visualize_delta_times.py
+            --add-data "./calibration-helper-GUI.ico:." \
+            calibration-helper-GUI.py
         shell: bash
 
       - name: 🏗️ Build esptool-gui with PyInstaller (Windows)
         if: runner.os == 'Windows'
-        working-directory: tools
+        working-directory: tools/ESPTools-GUI
         shell: pwsh
         run: |
          $ESPTOOL_LOCATION = $(pip show esptool | findstr '^Location: ').Substring(10).Trim()
@@ -100,13 +100,13 @@ jobs:
             --add-data "$ESPTOOL_TARGETS_2" `
             esptool_gui.py
 
-      - name: 🏗️ Build visualize-delta-times with PyInstaller (Windows)
+      - name: 🏗️ Build calibration-helper-GUI with PyInstaller (Windows)
         if: runner.os == 'Windows'
-        working-directory: tools
+        working-directory: tools/calibration-helper-GUI
         shell: pwsh
         run: |
-          pyinstaller --onefile --windowed --name "visualize-delta-times" `
-            --icon visualize_delta_times.ico `
+          pyinstaller --onefile --windowed --name "calibration-helper-GUI" `
+            --icon calibration-helper-GUI.ico `
             --hidden-import matplotlib `
             --hidden-import matplotlib.backends.backend_tkagg `
             --hidden-import numpy `
@@ -117,12 +117,12 @@ jobs:
             --hidden-import tkinter.filedialog `
             --hidden-import tkinter.messagebox `
             --hidden-import tkinter.scrolledtext `
-            --add-data ".\\visualize_delta_times.ico;." `
-            visualize_delta_times.py
+            --add-data ".\\calibration-helper-GUI.ico;." `
+            calibration-helper-GUI.py
 
       - name: 🏗️ Build esptool-gui with PyInstaller (macOS .app bundle)
         if: runner.os == 'macOS'
-        working-directory: tools
+        working-directory: tools/ESPTools-GUI
         run: |
           # On macOS create an onedir .app bundle instead of --onefile
           pip install pillow
@@ -145,13 +145,13 @@ jobs:
             esptool_gui.py
         shell: bash
 
-      - name: 🏗️ Build visualize-delta-times with PyInstaller (macOS .app bundle)
+      - name: 🏗️ Build calibration-helper-GUI with PyInstaller (macOS .app bundle)
         if: runner.os == 'macOS'
-        working-directory: tools
+        working-directory: tools/calibration-helper-GUI
         run: |
           # On macOS create an onedir .app bundle instead of --onefile
-          pyinstaller --windowed --onedir --name "visualize-delta-times" \
-            --icon visualize_delta_times.ico \
+          pyinstaller --windowed --onedir --name "calibration-helper-GUI" \
+            --icon calibration-helper-GUI.ico \
             --hidden-import matplotlib \
             --hidden-import matplotlib.backends.backend_tkagg \
             --hidden-import numpy \
@@ -163,8 +163,8 @@ jobs:
             --hidden-import tkinter.filedialog \
             --hidden-import tkinter.messagebox \
             --hidden-import tkinter.scrolledtext \
-            --add-data "./visualize_delta_times.ico:." \
-            visualize_delta_times.py
+            --add-data "./calibration-helper-GUI.ico:." \
+            calibration-helper-GUI.py
         shell: bash
 
       - name: 📦 Prepare release assets (Linux)
@@ -172,9 +172,9 @@ jobs:
         working-directory: tools
         run: |
           chmod +x dist/esptool-gui
-          chmod +x dist/visualize-delta-times
+          chmod +x dist/calibration-helper-GUI
           mv dist/esptool-gui esptool-gui-linux-x64
-          mv dist/visualize-delta-times visualize-delta-times-linux-x64
+          mv dist/calibration-helper-GUI calibration-helper-GUI-linux-x64
 
       - name: 📦 Prepare release assets (Windows)
         if: runner.os == 'Windows'
@@ -182,7 +182,7 @@ jobs:
         shell: bash
         run: |
           mv dist/esptool-gui.exe esptool-gui-windows-x64.exe
-          mv dist/visualize-delta-times.exe visualize-delta-times-windows-x64.exe
+          mv dist/calibration-helper-GUI.exe calibration-helper-GUI-windows-x64.exe
 
       - name: 📦 Prepare release assets (macOS .app -> tar.gz)
         if: runner.os == 'macOS'
@@ -190,14 +190,14 @@ jobs:
         run: |
           # macOS produces .app directories — package each as a tar.gz for upload
           tar -C dist -czf esptool-gui-macos-x64.tar.gz "esptool-gui.app"
-          tar -C dist -czf visualize-delta-times-macos-x64.tar.gz "visualize-delta-times.app"
+          tar -C dist -czf calibration-helper-GUI-macos-x64.tar.gz "calibration-helper-GUI.app"
 
       - name: 📎 Upload executables to release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             tools/esptool-gui-*
-            tools/visualize-delta-times-*
+            tools/calibration-helper-GUI-*
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

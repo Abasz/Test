@@ -1,63 +1,109 @@
-# Version 7.0.0
+# ESP Rowing Monitor v7.0.0 Release
 
-This release marks a major milestone with significant architectural improvements, new export capabilities, enhanced firmware update functionality, and a full migration to modern testing infrastructure. The update ensures compatibility with ESPRM firmware v7.0.0 API changes while maintaining backward compatibility with older firmware versions.
+This major release introduces an advanced cyclic error filtering system for improved metric accuracy, a new calibration helper GUI tool, significant performance improvements, and includes breaking changes to the BLE API that require updated clients.
+
+The cyclic error filtering feature allows cleaner force curves and potentially reduces the required `IMPULSE_DATA_ARRAY_LENGTH` while yielding more accurate metrics. Combined with additional performance optimizations (approx. 13-15% improvement), the overall accuracy and responsiveness of ESP Rowing Monitor has been significantly enhanced.
+
+## ⚠️ Breaking Changes
+
+### Stroke Detection Settings BLE Characteristic
+
+The `minimumRecoverySlopeMargin` setting has been **removed** from the firmware as it was made obsolete by the `driveHandleForcesMaxCapacity` setting:
+
+- **Stroke Detection Settings Characteristic** payload size changed from **15 bytes to 11 bytes**
+- Old GUI clients sending the 15-byte payload will receive an `InvalidParameter` BLE error
+- Firmware will **not** accept or parse old-format payloads
+- **Required action**: Use the latest version of the [WebGUI](https://abasz.github.io/ESPRowingMonitor-WebGUI/)
+
+See [Custom BLE Services](docs/custom-ble-services.md#settings-service) for the updated byte layout.
+
+### Extended Metrics BLE Characteristic
+
+The `dragFactor` field in the Extended Metrics characteristic has been changed from 8-bit (1 byte) to 16-bit (2 bytes, unsigned short, Little Endian):
+
+- **Extended Metrics (UUID: 808a0d51-efae-4f0c-b2e0-48bc180d65c3)** now reports `dragFactor` as a 16-bit unsigned value rather than 8-bit
+- This change fixes [issue #21](https://github.com/Abasz/ESPRowingMonitor/issues/21) where machines with higher drag factors (e.g., magnetic and water rowers exceeding 255) couldn't be properly represented
+- Old clients that read a single byte will misinterpret values or parse the payload incorrectly if the actual value is above 255 (if below, backward compatibility is maintained)
 
 ## New Features
 
-### Enhanced Export Functionality
+### Cyclic Error Filtering
 
-• CSV Export: Added CSV export functionality for logbook entries, providing per-stroke data including elapsed time, distance, pace, power, stroke rate, drive/recovery durations, heart rate, drag factor, peak force, and handle forces.
-• Web Share API Integration: Enhanced export functionality to leverage the Web Share API on supported devices, providing a seamless sharing experience on mobile devices with automatic fallback to traditional downloads on desktop.
+- **Advanced Sensor Data Filtering**: Introduced a cyclic error filtering system (`CyclicErrorFilter` and `ExponentialWeightedAverage` class) that mitigates cyclic errors in sensor data, improving the accuracy of stroke detection.
+- **Cleaner Force Curves**: The filter produces cleaner handle force curves by correcting impulse timing variations caused by mechanical imperfections in the flywheel magnet placement.
+- **Reduced Data Requirements**: The cyclic error correction potentially allows using a smaller `IMPULSE_DATA_ARRAY_LENGTH` while maintaining or improving metric accuracy.
 
-### Firmware Update Manager
+### Configurable BLE Update Interval
 
-• Automated Firmware Download: Implemented a new auto-versioning tool that automatically downloads firmware assets from GitHub releases during build time, ensuring users always have access to the latest firmware.
-• Firmware Profile Selection: Added a new bottom-sheet component for selecting and downloading firmware profiles directly from within the application.
-• Progress Tracking: Integrated download progress bar with ZIP extraction capabilities (using fflate library) for a smooth firmware update experience.
+- **Per-Profile BLE Update Control**: Added `MIN_BLE_UPDATE_INTERVAL` setting that allows configuring the minimum BLE update interval on a per-profile basis (aims to address issue #24 to some extent) while keeping the default behaviour unchanged (i.e. 4 seconds).
 
-### BLE API Updates
+### Calibration Helper Desktop GUI (cross-platform)
 
-• Extended Metrics Support: Updated extended metrics characteristic to support the new 16-bit dragFactor as per ESPRM v7.0.0 BLE API changes, with backward compatibility maintained for 7-byte packets from older firmware.
-• Deprecated Settings Handling: Refactored stroke detection settings to handle the deprecation of `minimumRecoverySlopeMargin` field in new firmware while maintaining backward compatibility for legacy firmware versions.
-• UUID Standardization: Updated BLE service and characteristic identifiers to use full 128-bit UUID format for improved cross-platform compatibility.
+- **New Calibration Tool**: A ready-to-use desktop GUI for analyzing and visualizing calibration data is now provided for Windows, Linux, and macOS.
+- **Delta Time Analysis**: Visualize raw vs. cleaned delta times from the cyclic error filter to understand sensor data quality.
+- **Handle Force Visualization**: Iterate over handle force curves for each stroke with navigation controls.
+- **Stroke Detection Analysis**: Identify missed or duplicate strokes using Theil-Sen regression analysis.
+- **Distributed with releases**: Platform-specific assets are attached to releases:
+  - Windows: standalone executable (.exe)
+  - Linux: standalone executable
+  - macOS: .app bundle packaged as a .tar.gz
 
-## General Updates and Improvements
+### Support for Kettler Stroker
 
-### Framework Updates
+- Add rower profile to support Kettler Stroke (thanks @Double-A-92)
 
-• Angular v21: Upgraded to Angular v21 from v20, including all related packages (Angular CLI, Material, CDK, compiler, and core modules).
-• Vitest Migration: Complete migration of testing infrastructure from Jasmine/Karma to Vitest for both application tests and tools, providing faster test execution and modern testing capabilities.
-• Zoneless Testing: Completed zoneless migration for unit tests, removing zone.js dependency and migrating from `fakeAsync` to Vitest's async utilities.
+## Updates and Improvements
 
-### Performance and Stability
+### Performance Optimizations
 
-• Stream Optimization: Refactored observables in ErgMetricsService and MetricsService to improve performance by sharing streams and avoiding multiple subscriptions to the same observable.
-• Error Handling: Improved error handling across services and components with better feedback mechanisms and more robust error recovery.
-• Service Worker Guards: Enhanced service worker integration with guards against environments where the service worker API is not available.
-• WebUSB API Guard: Added guards against missing WebUSB API when initializing ANT heart rate service to prevent startup crashes on unsupported platforms.
+- **Algorithm Efficiency**: Refactored series calculations to use `std::ranges`, `emplace_back`, and bit manipulation instead of modulo operator for improved performance and readability.
+- **Memory Management Fix**: Fixed a bug in manual vector memory allocation management that was causing unnecessary overhead.
+- **Overall Improvement**: Combined optimizations result in approximately 13-15% performance improvement in the main calculation loop.
 
-### UI and UX Enhancements
+### Deep Sleep Power Consumption
 
-• Responsive Layout: Refactored media queries to display more cards on iPhones in landscape mode for improved mobile experience.
-• Error Display: Fixed app startup crash error message display issues related to Angular custom app-root tag rendering, with improved device detection for iOS.
-• Settings Styling: Enhanced GeneralSettingsComponent form-field styling for better layout consistency.
+- **Improved Deep Sleep**: Added `gpio_deep_sleep_hold_en` to the sensor on/off switch pin to reduce power consumption during deep sleep mode.
 
-### Build and Development
+### Documentation Improvements
 
-• Build Scripts: Refactored and improved build and dev scripts in package.json for better clarity and consistency with a new `build:prepare` script.
-• ESLint Configuration: Fixed ESLint configuration issues and updated dependencies for improved linting coverage.
-• Test Improvements: Migrated test syntax from Jasmine to Vitest conventions and improved test implementations in line with modern best practices.
+- **Community FAQ**: Added comprehensive FAQ documentation derived from GitHub discussions, providing community-validated solutions, hardware-specific guidance, and troubleshooting workflows for common setup and calibration questions.
+- **DeepWiki Integration**: Created DeepWiki configuration (`.devin/wiki.json`) enabling AI-assisted documentation generation focused on helping new users with setup, calibration, and troubleshooting. [Interactive documentation](deepwiki.com/Abasz/ESPRowingMonitor) is available generated by DeepWiki.
+- **Enhanced Settings Documentation**: Added extensive cross-references between settings.md and FAQ entries for improved discoverability of calibration guidance and hardware setup information and updated links.
 
-### Bug Fixes
+### Code Quality Improvements
 
-• Database Error Handling: Added proper error handling for IndexedDB operations when fetching session summaries in the logbook.
-• File Download: Fixed file download implementation to properly revoke object URLs after download completion.
+- **Modern C++ Adoption**: Refactored codebase to use C++ ranges library (`std::ranges`) for improved readability and performance.
+- **Type Safety**: Added `[[nodiscard]]` attributes to various methods to prevent accidental ignoring of return values.
+- **Enum Improvements**: Refactored typedefs to `using` declarations and improved enum class usage.
+- **Standard Library Qualification**: Qualified certain math functions with `std::` for proper namespace usage.
+- **Null Pointer Safety**: Replaced `NULL` with `nullptr` throughout the codebase.
+- **Linting Cleanup**: Fixed various linting errors and updated NOLINT comments.
 
-## Breaking Changes
+### Build System and Testing
 
-• Testing Framework: Projects extending or using the test infrastructure must now use Vitest instead of Jasmine/Karma.
-• Removed zone.js: The application no longer depends on zone.js in production, which may affect extensions relying on Zone.js patching.
+- **CMake Improvements**: Refactored CMake scripts for improved structure and better support for custom environment targets in e2e tests.
+- **Extended Series Functionality**: Enhanced series classes with extended functionality and improved test coverage.
+- **Testing Library Updates**: Updated FakeIt  mocking library and Catch2 to their latest version.
 
-This release represents a significant modernization effort, with comprehensive test infrastructure updates, enhanced user features for data export and firmware management, and improved architectural foundations that prepare the application for future enhancements.
+## Bug Fixes
 
-Full Changelog: [6.2.0...7.0.0](https://github.com/Abasz/ESPRowingMonitor-WebGUI/compare/6.2.0...7.0.0)
+- **Drag Factor Size Bug**: Fixed issue #21 where drag factor was limited to 255 due to 8-bit storage, now supports 16-bit values for machines with higher drag factors.
+- **Zero Division in FTMS**: Fix zero division in the calculation of stroke rate and pace for FTMS causing undefined behaviour. (Thanks @Double-A-92)
+- **Handle Force Curves Alignment**: Fixed handle force curves being shifted by one data point by adding `torqueBeforeFlank` tracking in StrokeService.
+- **Control Point Write Flag**: Added `WRITE_NR` (Write Without Response) flag to BLE control points for improved compatibility.
+- **Instant Sleep Bug**: Fixed instant sleep bug in runtime test scenarios.
+- **CI/CD Fixes**: Fixed test CI workflow and improved compilation time.
+
+## Code Refactoring and Maintenance
+
+- **Drag Coefficient Calculation**: Refactored drag coefficient calculation for improved clarity and maintainability.
+- **HandleForces and DeltaTimes Task**: Refactored background tasks for better organization.
+- **Settings Deprecation**: Removed `minimumRecoverySlopeMargin` from all rower profiles and settings models as it became redundant with the `driveHandleForcesMaxCapacity` setting.
+
+## Notes
+
+- **BLE Client Updates Required**: Due to the breaking changes in BLE characteristics, all clients (including the WebGUI) must be updated to the latest version to work with this release.
+- **Drag Factor Compatibility**: The drag factor change from 8-bit to 16-bit maintains backward compatibility for values below 256, but clients parsing the extended metrics characteristic should be updated to read 2 bytes for the drag factor field.
+- **Calibration Helper**: The new calibration helper GUI tool is distributed alongside the ESPTool GUI and can be used independently for analyzing recorded session data.
+
+Full Changelog: [6.2.0...7.0.0](https://github.com/Abasz/ESPRowingMonitor/compare/6.2.0...7.0.0)

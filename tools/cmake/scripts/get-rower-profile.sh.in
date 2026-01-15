@@ -1,0 +1,25 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+set -o pipefail
+
+targetEnvironment="${1:-}"
+
+if [ "${targetEnvironment}" = "custom" ]; then
+    echo "custom"
+    exit 0
+fi
+
+rowerProfileName="${targetEnvironment%%-*}"
+
+rowerProfile=$(awk -v rowerProfileName="${rowerProfileName}" '
+    /^\[env:/ { in_section = 0 }                                       # Reset flag when entering a new section
+    /^\[env:/ && index($0, "[env:" rowerProfileName "-") == 1 { in_section = 1 }  # Match section starting with rower profile
+    in_section && /-D ROWER_PROFILE/ {
+        match($0, /\/([^\/\.]+)\./, matches)                           # Extract text between slash and dot
+        print matches[1]
+        exit                                                           # Exit after finding the desired line
+    }
+' "@PROJECT_SOURCE_DIR@/platformio.ini")
+
+echo "${rowerProfile:-genericAir}"

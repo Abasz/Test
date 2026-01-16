@@ -27,7 +27,7 @@ The `dragFactor` field in the Extended Metrics characteristic has been changed f
 
 ## 📌 Table of Contents
 
-1. [Breaking Changes](#%EF%B8%8F-breaking-changes-700)
+1. [Breaking Changes](#-breaking-changes-700)
 2. [Aim of the Project](#-aim-of-the-project)
 3. [Key Features](#-key-features)
 4. [Installation](#-installation)

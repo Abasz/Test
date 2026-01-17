@@ -5,8 +5,8 @@
 
 #include "Arduino.h"
 #include "ArduinoLog.h"
-#include "FastLED.h"
 
+#include "./enums.h"
 #include "./macros.h"
 #include "./settings.model.h"
 

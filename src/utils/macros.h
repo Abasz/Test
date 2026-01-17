@@ -146,7 +146,7 @@ consteval std::string_view getHardwareRevision()
 #endif
 
 #if !defined(RGB_LED_COLOR_CHANNEL_ORDER)
-    #define RGB_LED_COLOR_CHANNEL_ORDER RGB
+    #define RGB_LED_COLOR_CHANNEL_ORDER EOrder::RGB
 #endif
 
 #if !defined(BATTERY_PIN_NUMBER)

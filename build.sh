@@ -10,7 +10,7 @@ for environment in $(echo "${environments}" | cut -d'-' -f1 | sort -u); do
   "$WORKSPACE/build/run-calibration" "${environment}-generic"
 done
 
-exit 0
+#exit 0
 
 echo "🔨 Building binaries"
 environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')

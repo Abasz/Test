@@ -3,7 +3,7 @@ name: Build & Attach Firmware to Release
 on:
   release:
     types: [created]
-  workflow_dispatch: 
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -259,27 +259,3 @@ jobs:
           # macOS produces .app directories — package each as a tar.gz for upload
           tar -C ESPTools-GUI/dist -czf esptool-gui-macos-x64.tar.gz "esptool-gui.app"
           tar -C calibration-helper/dist -czf calibration-helper-gui-macos-x64.tar.gz "calibration-helper-gui.app"
-
-      - name: 📎 Upload executables to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            tools/esptool-gui-*
-            tools/calibration-helper-*
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  notify-downstream:
-    runs-on: ubuntu-latest
-    needs: [build-and-upload, build-gui-executables]
-    if: success()
-    
-    steps:
-      - name: 🚀 Dispatch WebGUI Build
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          repository: Abasz/ESPRowingMonitor-WebGUI
-          event-type: esp-rowing-monitor-release
-          client-payload: '{"tag": "${{ github.ref_name }}"}'

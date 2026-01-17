@@ -29,7 +29,7 @@ public:
             printf("\n");
 #pragma GCC diagnostic pop
         }
-    };
+    }
 
     template <class T, typename... Args>
     void verboseln(T msg, Args... args)
@@ -42,7 +42,7 @@ public:
             printf("\n");
 #pragma GCC diagnostic pop
         }
-    };
+    }
 
     template <class T, typename... Args>
     void traceln(T msg, Args... args)
@@ -55,7 +55,7 @@ public:
             printf("\n");
 #pragma GCC diagnostic pop
         }
-    };
+    }
 
     template <class T, typename... Args>
     void warningln(T msg, Args... args)
@@ -68,7 +68,7 @@ public:
             printf("\n");
 #pragma GCC diagnostic pop
         }
-    };
+    }
 
     template <class T, typename... Args>
     void errorln(T msg, Args... args)
@@ -81,7 +81,7 @@ public:
             printf("\n");
 #pragma GCC diagnostic pop
         }
-    };
+    }
 
     inline void setLevel(int level) {}
 };

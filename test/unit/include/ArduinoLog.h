@@ -38,7 +38,7 @@ public:
             printf(msg, args...);
             printf("\n");
         }
-    };
+    }
 
     template <class T, typename... Args>
     void verboseln(T msg, Args... args)
@@ -48,7 +48,7 @@ public:
             printf(msg, args...);
             printf("\n");
         }
-    };
+    }
 
     template <class T, typename... Args>
     void traceln(T msg, Args... args)
@@ -58,7 +58,7 @@ public:
             printf(msg, args...);
             printf("\n");
         }
-    };
+    }
 
     template <class T, typename... Args>
     void warningln(T msg, Args... args)
@@ -68,7 +68,7 @@ public:
             printf(msg, args...);
             printf("\n");
         }
-    };
+    }
 
     template <class T, typename... Args>
     void errorln(T msg, Args... args)
@@ -78,7 +78,7 @@ public:
             printf(msg, args...);
             printf("\n");
         }
-    };
+    }
 
     virtual inline void setLevel(ArduinoLogLevel level) {}
     inline void begin(ArduinoLogLevel level, Print *logOutput, bool showLevel = true) {}

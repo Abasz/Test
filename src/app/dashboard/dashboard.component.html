@@ -1,0 +1,22 @@
+<app-settings-bar></app-settings-bar>
+@let entries = tileEntries();
+<div
+    class="grid dashboard"
+    [style.--dashboard-cols]="gridColumns()"
+    [style.--dashboard-rows]="gridRows()"
+>
+    @for (tile of layoutTiles(); track tile.id) {
+        @let entry = entries.get(tile.id);
+        <div
+            class="tile"
+            [attr.data-tile-type]="tile.id"
+            [style.grid-row]="tile.position.rowStart + ' / span ' + tile.position.rowSpan"
+            [style.grid-column]="tile.position.columnStart + ' / span ' + tile.position.columnSpan"
+        >
+            <ng-container
+                [ngComponentOutlet]="entry?.component ?? null"
+                [ngComponentOutletInputs]="entry?.inputs ?? {}"
+            ></ng-container>
+        </div>
+    }
+</div>

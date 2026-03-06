@@ -14,6 +14,7 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatButton } from "@angular/material/button";
 import {
     MAT_DIALOG_DATA,
+    MatDialog,
     MatDialogActions,
     MatDialogContent,
     MatDialogRef,
@@ -38,14 +39,26 @@ import { UtilsService } from "../../common/services/utils.service";
 import { SnackBarConfirmComponent } from "../../common/snack-bar-confirm/snack-bar-confirm.component";
 
 import { DisplaySettingsComponent } from "./display-settings/display-settings.component";
+import {
+    ExportProfileDialogComponent,
+    ExportProfileDialogResult,
+} from "./export-profile-dialog/export-profile-dialog.component";
 import { GeneralSettingsComponent } from "./general-settings/general-settings.component";
 import { RowingSettingsComponent, RowingSettingsFormGroup } from "./rower-settings/rowing-settings.component";
+import { SettingsExportService } from "./settings-export.service";
+
+enum SettingsTab {
+    General = 0,
+    Display = 1,
+    Rowing = 2,
+}
 
 @Component({
     selector: "app-settings-dialog",
     templateUrl: "./settings-dialog.component.html",
     styleUrls: ["./settings-dialog.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush,
+    providers: [SettingsExportService],
     imports: [
         MatDialogTitle,
         CdkScrollable,
@@ -61,6 +74,8 @@ import { RowingSettingsComponent, RowingSettingsFormGroup } from "./rower-settin
     ],
 })
 export class SettingsDialogComponent {
+    readonly SettingsTab: typeof SettingsTab = SettingsTab;
+
     readonly rowingSettings: Signal<RowingSettingsComponent> = viewChild.required(RowingSettingsComponent);
     readonly generalSettings: Signal<GeneralSettingsComponent> = viewChild.required(GeneralSettingsComponent);
     readonly displaySettings: Signal<DisplaySettingsComponent> = viewChild.required(DisplaySettingsComponent);
@@ -72,9 +87,9 @@ export class SettingsDialogComponent {
         const isRowingFormSaveable = this.isRowingFormSaveable();
 
         return (
-            (currentTab === 0 && isGeneralFormSaveable) ||
-            (currentTab === 1 && isDisplayFormSaveable) ||
-            (currentTab === 2 && isRowingFormSaveable)
+            (currentTab === SettingsTab.General && isGeneralFormSaveable) ||
+            (currentTab === SettingsTab.Display && isDisplayFormSaveable) ||
+            (currentTab === SettingsTab.Rowing && isRowingFormSaveable)
         );
     });
 
@@ -97,6 +112,8 @@ export class SettingsDialogComponent {
         private ergSettingsService: ErgSettingsService,
         private ergConnectionService: ErgConnectionService,
         private snackBar: MatSnackBar,
+        private dialog: MatDialog,
+        private settingsExportService: SettingsExportService,
         @Inject(MAT_DIALOG_DATA)
         public data: {
             rowerSettings: IRowerSettings;
@@ -157,7 +174,7 @@ export class SettingsDialogComponent {
 
             if (tabsWithChanges.length > 0 && (await this.showSaveConfirmation(tabsWithChanges))) {
                 await this.saveGeneralSettings();
-                await this.saveDisplaySettings();
+                this.saveDisplaySettings();
                 await this.saveRowingSettings();
             } else {
                 await this.saveCurrentTabSettings(currentTabIndex);
@@ -169,8 +186,41 @@ export class SettingsDialogComponent {
         }
     }
 
-    onTabChange(newTabIndex: number): void {
+    onTabChange(newTabIndex: SettingsTab): void {
         this.currentTabIndex.set(newTabIndex);
+    }
+
+    async exportProfile(): Promise<void> {
+        if (this.rowingSettings().getForm().invalid) {
+            return;
+        }
+
+        const result = await firstValueFrom(
+            this.dialog
+                .open<
+                    ExportProfileDialogComponent,
+                    void,
+                    ExportProfileDialogResult
+                >(ExportProfileDialogComponent, { width: "360px", maxWidth: "95vw" })
+                .afterClosed(),
+        );
+
+        if (!result) {
+            return;
+        }
+
+        const formValue = this.rowingSettings().getForm().getRawValue();
+
+        await this.settingsExportService.exportRowerProfile(
+            {
+                machineSettings: formValue.machineSettings,
+                sensorSignalSettings: formValue.sensorSignalSettings,
+                dragFactorSettings: formValue.dragFactorSettings,
+                strokeDetectionSettings: formValue.strokeDetectionSettings,
+            },
+            result.deviceName,
+            result.modelNumber,
+        );
     }
 
     async handleDialogClose(): Promise<void> {
@@ -273,13 +323,13 @@ export class SettingsDialogComponent {
 
     private async saveCurrentTabSettings(currentTabIndex: number): Promise<void> {
         switch (currentTabIndex) {
-            case 0:
+            case SettingsTab.General:
                 await this.saveGeneralSettings();
                 break;
-            case 1:
+            case SettingsTab.Display:
                 this.saveDisplaySettings();
                 break;
-            case 2:
+            case SettingsTab.Rowing:
                 await this.saveRowingSettings();
                 break;
             default:
@@ -348,15 +398,15 @@ export class SettingsDialogComponent {
     private getSaveableTabLabels(currentTabIndex: number): Array<string> {
         const tabsWithChanges: Array<string> = [];
 
-        if (currentTabIndex !== 0 && this.isGeneralFormSaveable()) {
+        if (currentTabIndex !== SettingsTab.General && this.isGeneralFormSaveable()) {
             tabsWithChanges.push("General");
         }
 
-        if (currentTabIndex !== 1 && this.isDisplayFormSaveable()) {
+        if (currentTabIndex !== SettingsTab.Display && this.isDisplayFormSaveable()) {
             tabsWithChanges.push("Display");
         }
 
-        if (currentTabIndex !== 2 && this.isRowingFormSaveable()) {
+        if (currentTabIndex !== SettingsTab.Rowing && this.isRowingFormSaveable()) {
             tabsWithChanges.push("Rowing");
         }
 

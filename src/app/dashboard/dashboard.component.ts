@@ -11,20 +11,20 @@ import {
     Type,
 } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
-import { filter, interval, map, merge, Observable, pairwise, startWith, switchMap, take } from "rxjs";
+import { map, scan } from "rxjs";
 
 import {
+    AveragingMode,
     Config,
     ICalculatedMetrics,
     IDisplayConfig,
     IDisplayLayoutConfig,
-    IErgConnectionStatus,
     IHeartRate,
     OrientationLock,
 } from "../../common/common.interfaces";
 import { ConfigManagerService } from "../../common/services/config-manager.service";
-import { ErgConnectionService } from "../../common/services/ergometer/erg-connection.service";
 import { MetricsService } from "../../common/services/metrics.service";
+import { SessionManagerService } from "../../common/services/session-manager.service";
 import { UtilsService } from "../../common/services/utils.service";
 
 import {
@@ -41,6 +41,39 @@ import {
 } from "./dashboard-tile-definitions";
 import { DashboardTileDefinition, PlacedDashboardTile } from "./dashboard.interfaces";
 import { SettingsBarComponent } from "./settings-bar/settings-bar.component";
+
+type AverageableMetricKey = Exclude<keyof ICalculatedMetrics, "distance" | "strokeCount" | "handleForces">;
+
+const PERFORMANCE_METRIC_KEYS: ReadonlyArray<AverageableMetricKey> = [
+    "speed",
+    "avgStrokePower",
+    "strokeRate",
+];
+
+const ALL_AVERAGEABLE_METRIC_KEYS: ReadonlyArray<AverageableMetricKey> = [
+    ...PERFORMANCE_METRIC_KEYS,
+    "driveDuration",
+    "recoveryDuration",
+    "dragFactor",
+    "peakForce",
+    "distPerStroke",
+    "driveLength",
+];
+
+const ZERO_METRICS: ICalculatedMetrics = {
+    avgStrokePower: 0,
+    driveDuration: 0,
+    recoveryDuration: 0,
+    dragFactor: 0,
+    distance: 0,
+    strokeCount: 0,
+    handleForces: [],
+    peakForce: 0,
+    strokeRate: 0,
+    speed: 0,
+    distPerStroke: 0,
+    driveLength: 0,
+};
 
 /**
  * Extended ScreenOrientation interface including the lock/unlock methods
@@ -59,7 +92,7 @@ interface ScreenOrientationWithLock extends ScreenOrientation {
     imports: [SettingsBarComponent, NgComponentOutlet],
 })
 export class DashboardComponent implements AfterViewInit, OnDestroy {
-    readonly elapseTime: Signal<number>;
+    readonly elapseTime: Signal<number> = this.sessionManager.elapsedTime;
     readonly heartRateData: Signal<IHeartRate | undefined> = toSignal(this.metricsService.heartRateData$, {
         requireSync: true,
     });
@@ -67,23 +100,7 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
     readonly layoutTiles: Signal<Array<PlacedDashboardTile>>;
     readonly gridColumns: Signal<number>;
     readonly gridRows: Signal<number>;
-    readonly rowingData: Signal<ICalculatedMetrics> = toSignal(this.metricsService.allMetrics$, {
-        initialValue: {
-            activityStartTime: new Date(),
-            avgStrokePower: 0,
-            driveDuration: 0,
-            recoveryDuration: 0,
-            dragFactor: 0,
-            distance: 0,
-            strokeCount: 0,
-            handleForces: [],
-            peakForce: 0,
-            strokeRate: 0,
-            speed: 0,
-            distPerStroke: 0,
-            driveLength: 0,
-        },
-    });
+    readonly rowingData: Signal<ICalculatedMetrics>;
 
     readonly tileEntries: Signal<
         ReadonlyMap<DashboardTileId, { component: Type<DashboardTileComponent>; inputs: TileComponentInputs }>
@@ -163,49 +180,61 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
 
     constructor(
         private metricsService: MetricsService,
-        private ergConnectionService: ErgConnectionService,
+        private sessionManager: SessionManagerService,
         private utils: UtilsService,
         private configManager: ConfigManagerService,
         private breakpointObserver: BreakpointObserver,
     ) {
-        this.elapseTime = toSignal(
-            this.ergConnectionService.connectionStatus$().pipe(
-                filter(
-                    (connectionStatus: IErgConnectionStatus): boolean =>
-                        connectionStatus.status === "connected",
-                ),
-                take(1),
-                switchMap(
-                    (): Observable<number> =>
-                        merge(
-                            interval(1000),
-                            this.metricsService.allMetrics$.pipe(
-                                pairwise(),
-                                filter(
-                                    ([previous, current]: [
-                                        ICalculatedMetrics,
-                                        ICalculatedMetrics,
-                                    ]): boolean => previous.activityStartTime !== current.activityStartTime,
-                                ),
-                            ),
-                        ).pipe(
-                            startWith(0),
-                            map(
-                                (): number =>
-                                    (Date.now() - this.metricsService.getActivityStartTime().getTime()) /
-                                    1000,
-                            ),
-                        ),
-                ),
-            ),
-            { initialValue: 0 },
-        );
-
         this.displayConfig = toSignal(
             this.configManager.configChanged$.pipe(map((config: Config): IDisplayConfig => config.display)),
             {
                 requireSync: true,
             },
+        );
+
+        this.rowingData = toSignal(
+            this.sessionManager.sessionMetrics$.pipe(
+                scan(
+                    (
+                        buffer: Array<ICalculatedMetrics>,
+                        current: ICalculatedMetrics,
+                    ): Array<ICalculatedMetrics> => {
+                        const { mode, windowSize }: { mode: AveragingMode; windowSize: number } =
+                            this.displayConfig().averaging;
+
+                        if (mode === "off" || current.strokeRate === 0) {
+                            return [current];
+                        }
+
+                        const last = buffer[buffer.length - 1];
+
+                        if (last !== undefined && last.strokeCount === current.strokeCount) {
+                            return [...buffer.slice(0, -1), current];
+                        }
+
+                        const updated = [...buffer, current];
+
+                        while (updated.length > windowSize) {
+                            updated.shift();
+                        }
+
+                        return updated;
+                    },
+                    [] as Array<ICalculatedMetrics>,
+                ),
+                map((buffer: Array<ICalculatedMetrics>): ICalculatedMetrics => {
+                    if (buffer.length <= 1) {
+                        return buffer[buffer.length - 1];
+                    }
+
+                    const mode = this.displayConfig().averaging.mode;
+                    const keys =
+                        mode === "performance" ? PERFORMANCE_METRIC_KEYS : ALL_AVERAGEABLE_METRIC_KEYS;
+
+                    return DashboardComponent.averageMetrics(buffer, keys);
+                }),
+            ),
+            { initialValue: ZERO_METRICS },
         );
 
         this.isDeviceOrientationPortrait = toSignal(
@@ -289,5 +318,24 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
 
     private supportsOrientationLock(): boolean {
         return typeof (screen?.orientation as ScreenOrientationWithLock | undefined)?.lock === "function";
+    }
+
+    private static averageMetrics(
+        buffer: ReadonlyArray<ICalculatedMetrics>,
+        keys: ReadonlyArray<AverageableMetricKey>,
+    ): ICalculatedMetrics {
+        const latest = buffer[buffer.length - 1];
+        const count = buffer.length;
+
+        return {
+            ...latest,
+            ...Object.fromEntries(
+                keys.map((key: AverageableMetricKey): [AverageableMetricKey, number] => [
+                    key,
+                    buffer.reduce((sum: number, entry: ICalculatedMetrics): number => sum + entry[key], 0) /
+                        count,
+                ]),
+            ),
+        } as ICalculatedMetrics;
     }
 }

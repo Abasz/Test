@@ -1,8 +1,7 @@
-@use "../../../theme" as app-theme;
 @use "./directives/dnd-theme" as dnd-theme;
 
 :host {
-    @include dnd-theme.theme(app-theme.$light-theme);
+    @include dnd-theme.theme();
 
     display: flex;
     flex-direction: column;
@@ -36,8 +35,11 @@ mat-icon.palette-icon {
     }
 }
 
-dnd-tile-grid span {
-    text-align: center;
+dnd-tile-grid,
+dnd-tile-palette {
+    span {
+        text-align: center;
+    }
 }
 
 .empty {

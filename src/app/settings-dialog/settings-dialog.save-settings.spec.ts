@@ -45,6 +45,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 logToSdCard: { dirty: true, value: true },
                 bleMode: { dirty: true, value: 1 },
                 heartRateMonitor: { dirty: true, value: "ant" },
+                autoStartTimer: { dirty: true, value: false },
             },
             value: {
                 heartRateMonitor: "ant",
@@ -72,6 +73,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -96,6 +98,12 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 heartRateMonitor: "ant",
             }),
         );
+        expect(mockConfigManagerService.setGroup).toHaveBeenCalledWith(
+            "general",
+            expect.objectContaining({
+                autoStartTimer: false,
+            }),
+        );
         expect(mockMatDialogRef.close).toHaveBeenCalled();
     });
 
@@ -115,6 +123,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -142,6 +151,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             },
+            averaging: { mode: "off", windowSize: 3 },
         });
         expect(mockMatDialogRef.close).toHaveBeenCalled();
     });
@@ -170,6 +180,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
             getForm: vi.fn().mockReturnValue(mockDisplayForm),
             isLayoutDirty: signal(true),
             getLayoutConfig: vi.fn().mockReturnValue(customLayout),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -193,6 +204,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 showAxisLabels: true,
             },
             layout: customLayout,
+            averaging: { mode: "off", windowSize: 3 },
         });
         expect(mockMatDialogRef.close).toHaveBeenCalled();
     });
@@ -213,6 +225,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -470,6 +483,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -536,6 +550,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -602,6 +617,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -646,6 +662,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 logToSdCard: { dirty: false, value: false },
                 bleMode: { dirty: false, value: 0 },
                 heartRateMonitor: { dirty: false, value: "none" },
+                autoStartTimer: { dirty: false, value: true },
             },
         };
         const mockRowingForm = {
@@ -669,6 +686,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -718,6 +736,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
             getForm: vi.fn().mockReturnValue(mockDisplayForm),
             isLayoutDirty: signal(true),
             getLayoutConfig: vi.fn().mockReturnValue(customLayout),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),
@@ -756,6 +775,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 showAxisLabels: true,
             },
             layout: customLayout,
+            averaging: { mode: "off", windowSize: 3 },
         });
     });
 
@@ -783,6 +803,7 @@ describe("SettingsDialogComponent saveSettings method", (): void => {
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto",
             }),
+            getAveragingConfig: vi.fn().mockReturnValue({ mode: "off", windowSize: 3 }),
         } as unknown as ReturnType<typeof component.displaySettings>);
         vi.spyOn(component, "rowingSettings").mockReturnValue({
             getForm: vi.fn().mockReturnValue(mockRowingForm),

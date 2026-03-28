@@ -35,6 +35,7 @@ describe("ConfigManagerService", (): void => {
                 heartRateMonitor: merged.heartRateMonitor,
                 heartRateBleId: merged.heartRateBleId,
                 ergoMonitorBleId: merged.ergoMonitorBleId,
+                autoStartTimer: true,
             },
             display: {
                 general: {
@@ -49,6 +50,10 @@ describe("ConfigManagerService", (): void => {
                     landscape: DEFAULT_LANDSCAPE_LAYOUT,
                     portrait: DEFAULT_PORTRAIT_LAYOUT,
                     orientationLock: "auto" as const,
+                },
+                averaging: {
+                    mode: "off" as const,
+                    windowSize: 3,
                 },
             },
         };

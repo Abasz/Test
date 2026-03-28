@@ -104,6 +104,7 @@ export const createMockConfig: (overrides?: DeepPartial<Config>) => Config = (
             ergoMonitorBleId: "",
             heartRateBleId: "",
             heartRateMonitor: "off",
+            autoStartTimer: true,
         },
         display: {
             general: {
@@ -118,6 +119,10 @@ export const createMockConfig: (overrides?: DeepPartial<Config>) => Config = (
                 landscape: DEFAULT_LANDSCAPE_LAYOUT,
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto" as const,
+            },
+            averaging: {
+                mode: "off" as const,
+                windowSize: 3,
             },
         },
     };
@@ -137,6 +142,10 @@ export const createMockConfig: (overrides?: DeepPartial<Config>) => Config = (
                 ...(overrides.display?.forceCurve ?? {}),
             },
             layout: (overrides.display?.layout as IDisplayLayoutConfig) ?? defaultConfig.display.layout,
+            averaging: {
+                ...defaultConfig.display.averaging,
+                ...(overrides.display?.averaging ?? {}),
+            },
         },
     };
 };
@@ -180,6 +189,7 @@ export const createMockGeneralForm: (
         logToSdCard: false,
         bleMode: 0,
         heartRateMonitor: "none",
+        autoStartTimer: true,
         ...controlValues,
     };
 
@@ -433,6 +443,10 @@ export const setupMockChildComponents: (
             portrait: DEFAULT_PORTRAIT_LAYOUT,
             orientationLock: "auto",
         }),
+        getAveragingConfig: vi.fn().mockReturnValue({
+            mode: "off",
+            windowSize: 3,
+        }),
     } as unknown as ReturnType<typeof component.displaySettings>);
 
     component.onDisplayFormValidityChange(true);
@@ -463,6 +477,10 @@ export const setupCleanGeneralAndDisplayForms: (component: SettingsDialogCompone
             landscape: DEFAULT_LANDSCAPE_LAYOUT,
             portrait: DEFAULT_PORTRAIT_LAYOUT,
             orientationLock: "auto",
+        }),
+        getAveragingConfig: vi.fn().mockReturnValue({
+            mode: "off",
+            windowSize: 3,
         }),
     } as unknown as ReturnType<typeof component.displaySettings>);
 
@@ -499,15 +517,15 @@ export const createMockErgSettingsService = (): Pick<
         changeStrokeSettings: vi.fn(),
         restartDevice: vi.fn(),
     };
-    vi.mocked(mock.changeLogLevel).mockResolvedValue();
-    vi.mocked(mock.changeDeltaTimeLogging).mockResolvedValue();
-    vi.mocked(mock.changeLogToSdCard).mockResolvedValue();
-    vi.mocked(mock.changeBleServiceType).mockResolvedValue();
-    vi.mocked(mock.changeMachineSettings).mockResolvedValue();
-    vi.mocked(mock.changeDragFactorSettings).mockResolvedValue();
-    vi.mocked(mock.changeSensorSignalSettings).mockResolvedValue();
-    vi.mocked(mock.changeStrokeSettings).mockResolvedValue();
-    vi.mocked(mock.restartDevice).mockResolvedValue();
+    vi.mocked(mock.changeLogLevel).mockResolvedValue(undefined);
+    vi.mocked(mock.changeDeltaTimeLogging).mockResolvedValue(undefined);
+    vi.mocked(mock.changeLogToSdCard).mockResolvedValue(undefined);
+    vi.mocked(mock.changeBleServiceType).mockResolvedValue(undefined);
+    vi.mocked(mock.changeMachineSettings).mockResolvedValue(undefined);
+    vi.mocked(mock.changeDragFactorSettings).mockResolvedValue(undefined);
+    vi.mocked(mock.changeSensorSignalSettings).mockResolvedValue(undefined);
+    vi.mocked(mock.changeStrokeSettings).mockResolvedValue(undefined);
+    vi.mocked(mock.restartDevice).mockResolvedValue(undefined);
 
     return mock;
 };
@@ -522,7 +540,7 @@ export const createMockErgConnectionService = (
         reconnect: vi.fn(),
         connectionStatus$: vi.fn(),
     };
-    vi.mocked(mock.reconnect).mockResolvedValue();
+    vi.mocked(mock.reconnect).mockResolvedValue(undefined);
     vi.mocked(mock.connectionStatus$).mockReturnValue(of(ergConnectionStatus));
 
     return mock;

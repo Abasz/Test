@@ -75,14 +75,14 @@ describe("ExportProfileDialogComponent", (): void => {
             component.exportForm.controls.deviceName.setValue("");
 
             expect(component.exportForm.controls.deviceName.valid).toBe(false);
-            expect(component.exportForm.controls.deviceName.errors?.["required"]).toBeTruthy();
+            expect(component.exportForm.controls.deviceName.errors?.required).toBeTruthy();
         });
 
         it("should require model number", (): void => {
             component.exportForm.controls.modelNumber.setValue("");
 
             expect(component.exportForm.controls.modelNumber.valid).toBe(false);
-            expect(component.exportForm.controls.modelNumber.errors?.["required"]).toBeTruthy();
+            expect(component.exportForm.controls.modelNumber.errors?.required).toBeTruthy();
         });
 
         it("should accept device name with spaces within max length", (): void => {
@@ -101,7 +101,7 @@ describe("ExportProfileDialogComponent", (): void => {
             component.exportForm.controls.deviceName.setValue("Rower@Home");
 
             expect(component.exportForm.controls.deviceName.valid).toBe(false);
-            expect(component.exportForm.controls.deviceName.errors?.["pattern"]).toBeTruthy();
+            expect(component.exportForm.controls.deviceName.errors?.pattern).toBeTruthy();
         });
 
         it("should show pattern error message when device name contains special characters", (): void => {
@@ -124,7 +124,7 @@ describe("ExportProfileDialogComponent", (): void => {
             component.exportForm.controls.deviceName.setValue("A".repeat(19));
 
             expect(component.exportForm.controls.deviceName.valid).toBe(false);
-            expect(component.exportForm.controls.deviceName.errors?.["maxlength"]).toBeTruthy();
+            expect(component.exportForm.controls.deviceName.errors?.maxlength).toBeTruthy();
         });
 
         it("should show maxlength error message when device name is too long", (): void => {

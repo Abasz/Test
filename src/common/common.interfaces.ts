@@ -64,6 +64,7 @@ export interface IGeneralConfig {
     ergoMonitorBleId: string;
     heartRateBleId: string;
     heartRateMonitor: HeartRateMonitorMode;
+    autoStartTimer: boolean;
 }
 
 export interface IDisplayGeneralConfig {
@@ -94,10 +95,18 @@ export interface IDisplayForceCurveConfig {
     showAxisLabels: boolean;
 }
 
+export type AveragingMode = "off" | "all" | "performance";
+
+export interface IDisplayAveragingConfig {
+    mode: AveragingMode;
+    windowSize: number;
+}
+
 export interface IDisplayConfig {
     general: IDisplayGeneralConfig;
     forceCurve: IDisplayForceCurveConfig;
     layout: IDisplayLayoutConfig;
+    averaging: IDisplayAveragingConfig;
 }
 
 export class Config {
@@ -105,6 +114,7 @@ export class Config {
         ergoMonitorBleId: "",
         heartRateBleId: "",
         heartRateMonitor: "off",
+        autoStartTimer: true,
     };
 
     display: IDisplayConfig = {
@@ -120,6 +130,10 @@ export class Config {
             landscape: DEFAULT_LANDSCAPE_LAYOUT,
             portrait: DEFAULT_PORTRAIT_LAYOUT,
             orientationLock: "auto",
+        },
+        averaging: {
+            mode: "off",
+            windowSize: 3,
         },
     };
 }
@@ -153,7 +167,6 @@ export interface IBaseMetrics {
 }
 
 export interface ICalculatedMetrics extends Omit<IExtendedMetrics & IBaseMetrics, "revTime" | "strokeTime"> {
-    activityStartTime: Date;
     speed: number;
     strokeRate: number;
     peakForce: number;
@@ -162,7 +175,15 @@ export interface ICalculatedMetrics extends Omit<IExtendedMetrics & IBaseMetrics
     handleForces: Array<number>;
 }
 
+export type SessionState = "running" | "paused" | "stopped";
+
+export interface IRawCalculatedMetrics extends Omit<ICalculatedMetrics, "distance" | "strokeCount"> {
+    rawDistance: number;
+    rawStrokeCount: number;
+}
+
 export interface ISessionData extends ICalculatedMetrics {
+    elapsedTime: number;
     heartRate?: IHeartRate;
 }
 
@@ -171,6 +192,7 @@ export interface ISessionSummary {
     deviceName?: string;
     startTime: number;
     finishTime: number;
+    elapsedTime: number;
     distance: number;
     strokeCount: number;
 }

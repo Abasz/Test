@@ -1,28 +1,14 @@
 import { DestroyRef, Injectable } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
-import {
-    combineLatest,
-    distinctUntilChanged,
-    filter,
-    map,
-    merge,
-    Observable,
-    pairwise,
-    shareReplay,
-    startWith,
-    Subject,
-    take,
-    tap,
-    withLatestFrom,
-} from "rxjs";
+import { combineLatest, filter, map, Observable, pairwise, shareReplay, startWith } from "rxjs";
 
 import {
     IBaseMetrics,
-    ICalculatedMetrics,
     IErgConnectionStatus,
     IExtendedMetrics,
     IHeartRate,
     IHRConnectionStatus,
+    IRawCalculatedMetrics,
 } from "../common.interfaces";
 
 import { DataRecorderService } from "./data-recorder.service";
@@ -37,24 +23,9 @@ const cmInM = 100;
     providedIn: "root",
 })
 export class MetricsService {
-    readonly allMetrics$: Observable<ICalculatedMetrics>;
+    readonly rawMetrics$: Observable<IRawCalculatedMetrics>;
     readonly heartRateData$: Observable<IHeartRate | undefined>;
     readonly hrConnectionStatus$: Observable<IHRConnectionStatus>;
-
-    private activityStartDistance: number = 0;
-    private activityStartStrokeCount: number = 0;
-    private activityStartTime: Date = new Date();
-
-    private connectedDeviceName?: string;
-
-    private baseMetrics: IBaseMetrics = {
-        revTime: 0,
-        distance: 0,
-        strokeTime: 0,
-        strokeCount: 0,
-    };
-
-    private resetSubject: Subject<IBaseMetrics> = new Subject();
 
     constructor(
         private ergMetricService: ErgMetricsService,
@@ -64,47 +35,15 @@ export class MetricsService {
         private heartRateService: HeartRateService,
         private destroyRef: DestroyRef,
     ) {
-        this.allMetrics$ = this.setupMetricStream$().pipe(shareReplay({ bufferSize: 1, refCount: true }));
+        this.rawMetrics$ = this.streamBasicMetrics$().pipe(shareReplay({ bufferSize: 1, refCount: true }));
         this.heartRateData$ = this.heartRateService.streamHeartRate$();
         this.hrConnectionStatus$ = this.heartRateService.connectionStatus$();
 
         this.setupLogging();
 
-        this.ergConnectionService
-            .connectionStatus$()
-            .pipe(
-                filter(
-                    (connectionStatus: IErgConnectionStatus): boolean =>
-                        connectionStatus.status === "connected",
-                ),
-                take(1),
-                takeUntilDestroyed(this.destroyRef),
-            )
-            .subscribe((): void => {
-                this.activityStartTime = new Date();
-            });
-
         if (isSecureContext === true && navigator.bluetooth !== undefined) {
             this.ergConnectionService.reconnect();
         }
-    }
-
-    getActivityStartTime(): Date {
-        return this.activityStartTime;
-    }
-
-    reset(): void {
-        this.activityStartDistance = this.baseMetrics.distance;
-        this.activityStartStrokeCount = this.baseMetrics.strokeCount;
-        this.activityStartTime = new Date();
-        this.dataRecorder.reset(this.connectedDeviceName);
-
-        this.resetSubject.next({
-            revTime: this.baseMetrics.revTime,
-            distance: this.baseMetrics.distance,
-            strokeTime: this.baseMetrics.strokeTime,
-            strokeCount: this.baseMetrics.strokeCount,
-        });
     }
 
     private calculateDriveLength(handleForcesLength: number): number {
@@ -185,49 +124,13 @@ export class MetricsService {
             .subscribe((connectionStatus: IErgConnectionStatus): void => {
                 if (connectionStatus.deviceName && connectionStatus.deviceName.length > 0) {
                     this.dataRecorder.addConnectedDevice(connectionStatus.deviceName);
-                    this.connectedDeviceName = connectionStatus.deviceName;
                 }
-            });
-
-        this.allMetrics$
-            .pipe(
-                withLatestFrom(this.heartRateData$),
-                filter(
-                    ([calculatedMetrics]: [ICalculatedMetrics, IHeartRate | undefined]): boolean =>
-                        calculatedMetrics.strokeCount > 0 || calculatedMetrics.distance > 0,
-                ),
-                distinctUntilChanged(
-                    (
-                        [previousMetrics]: [ICalculatedMetrics, IHeartRate | undefined],
-                        [currentMetrics]: [ICalculatedMetrics, IHeartRate | undefined],
-                    ): boolean => {
-                        return (
-                            previousMetrics.distance === currentMetrics.distance &&
-                            previousMetrics.strokeCount === currentMetrics.strokeCount
-                        );
-                    },
-                ),
-                takeUntilDestroyed(this.destroyRef),
-            )
-            .subscribe(([metricsCurrent, heartRate]: [ICalculatedMetrics, IHeartRate | undefined]): void => {
-                this.dataRecorder.addSessionData({
-                    ...metricsCurrent,
-                    heartRate,
-                });
             });
     }
 
-    private setupMetricStream$(): Observable<ICalculatedMetrics> {
+    private streamBasicMetrics$(): Observable<IRawCalculatedMetrics> {
         return combineLatest([
-            this.streamMeasurement$().pipe(
-                tap((baseMetrics: IBaseMetrics): void => {
-                    if (baseMetrics.distance < this.baseMetrics.distance) {
-                        this.dataRecorder.reset(this.connectedDeviceName);
-                    }
-                    this.baseMetrics = baseMetrics;
-                }),
-                pairwise(),
-            ),
+            this.ergMetricService.streamMeasurement$().pipe(pairwise()),
             this.streamExtended$(),
             this.streamHandleForces$(),
         ]).pipe(
@@ -236,45 +139,26 @@ export class MetricsService {
                     [IBaseMetrics, IBaseMetrics],
                     IExtendedMetrics,
                     Array<number>,
-                ]): ICalculatedMetrics => {
-                    const distance: number = baseMetricsCurrent.distance - this.activityStartDistance;
-                    const strokeCount: number =
-                        baseMetricsCurrent.strokeCount - this.activityStartStrokeCount;
-
-                    return {
-                        activityStartTime: this.activityStartTime,
-                        avgStrokePower: extendedMetrics.avgStrokePower,
-                        driveDuration: extendedMetrics.driveDuration / 1e6,
-                        recoveryDuration: extendedMetrics.recoveryDuration / 1e6,
-                        dragFactor: extendedMetrics.dragFactor,
-                        distance: distance > 0 ? distance : 0,
-                        strokeCount: strokeCount > 0 ? strokeCount : 0,
-                        handleForces: handleForces,
-                        peakForce: Math.max(...handleForces, 0),
-                        strokeRate: this.calculateStrokeRate(baseMetricsPrevious, baseMetricsCurrent),
-                        speed: this.calculateSpeed(baseMetricsPrevious, baseMetricsCurrent),
-                        distPerStroke: this.calculateStrokeDistance(baseMetricsPrevious, baseMetricsCurrent),
-                        driveLength: this.calculateDriveLength(handleForces.length),
-                    };
-                },
+                ]): IRawCalculatedMetrics => ({
+                    avgStrokePower: extendedMetrics.avgStrokePower,
+                    driveDuration: extendedMetrics.driveDuration / 1e6,
+                    recoveryDuration: extendedMetrics.recoveryDuration / 1e6,
+                    dragFactor: extendedMetrics.dragFactor,
+                    rawDistance: baseMetricsCurrent.distance,
+                    rawStrokeCount: baseMetricsCurrent.strokeCount,
+                    handleForces: handleForces,
+                    peakForce: Math.max(...handleForces, 0),
+                    strokeRate: this.calculateStrokeRate(baseMetricsPrevious, baseMetricsCurrent),
+                    speed: this.calculateSpeed(baseMetricsPrevious, baseMetricsCurrent),
+                    distPerStroke: this.calculateStrokeDistance(baseMetricsPrevious, baseMetricsCurrent),
+                    driveLength: this.calculateDriveLength(handleForces.length),
+                }),
             ),
         );
     }
 
     private streamExtended$(): Observable<IExtendedMetrics> {
-        return merge(
-            this.ergMetricService.streamExtended$(),
-            this.resetSubject.pipe(
-                map(
-                    (): IExtendedMetrics => ({
-                        avgStrokePower: 0,
-                        dragFactor: 0,
-                        driveDuration: 0,
-                        recoveryDuration: 0,
-                    }),
-                ),
-            ),
-        ).pipe(
+        return this.ergMetricService.streamExtended$().pipe(
             startWith({
                 avgStrokePower: 0,
                 dragFactor: 0,
@@ -285,13 +169,6 @@ export class MetricsService {
     }
 
     private streamHandleForces$(): Observable<Array<number>> {
-        return merge(
-            this.ergMetricService.streamHandleForces$(),
-            this.resetSubject.pipe(map((): Array<number> => [])),
-        ).pipe(startWith([]));
-    }
-
-    private streamMeasurement$(): Observable<IBaseMetrics> {
-        return merge(this.ergMetricService.streamMeasurement$(), this.resetSubject);
+        return this.ergMetricService.streamHandleForces$().pipe(startWith([]));
     }
 }

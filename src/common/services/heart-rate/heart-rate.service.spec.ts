@@ -52,6 +52,7 @@ describe("HeartRateService", (): void => {
             ergoMonitorBleId: "",
             heartRateBleId: "",
             heartRateMonitor,
+            autoStartTimer: true,
         },
         display: {
             general: {
@@ -66,6 +67,10 @@ describe("HeartRateService", (): void => {
                 landscape: DEFAULT_LANDSCAPE_LAYOUT,
                 portrait: DEFAULT_PORTRAIT_LAYOUT,
                 orientationLock: "auto" as const,
+            },
+            averaging: {
+                mode: "off" as const,
+                windowSize: 3,
             },
         },
     });

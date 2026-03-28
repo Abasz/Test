@@ -1,4 +1,5 @@
 import { TestbedHarnessEnvironment } from "@angular/cdk/testing/testbed";
+import { Location } from "@angular/common";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { MatButtonHarness } from "@angular/material/button/testing";
 import { MAT_DIALOG_DATA } from "@angular/material/dialog";
@@ -9,8 +10,9 @@ import {
     MatSnackBarRef,
     TextOnlySnackBar,
 } from "@angular/material/snack-bar";
+import { Router } from "@angular/router";
 import { firstValueFrom, Observable, of, Subject } from "rxjs";
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 import { ISessionSummary } from "../../common/common.interfaces";
 import { DataRecorderService } from "../../common/services/data-recorder.service";
@@ -31,17 +33,20 @@ describe("LogbookDialogComponent", (): void => {
         | "deleteSession"
         | "export"
         | "exportSessionToJson"
-        | "exportSessionToTcx"
+        | "exportSessionToFit"
         | "exportSessionToCsv"
         | "import"
     >;
     let snackBarSpy: Pick<MatSnackBar, "open" | "openFromComponent">;
+    let routerSpy: Pick<Router, "serializeUrl" | "createUrlTree">;
+    let locationSpy: Pick<Location, "prepareExternalUrl">;
 
     const SESSIONS: Array<ISessionSummary> = [
         {
             sessionId: new Date("2024-01-02T10:00:00Z").getTime(),
             startTime: 1000,
             finishTime: 7000,
+            elapsedTime: 6000,
             distance: 25000,
             strokeCount: 30,
             deviceName: "Device A",
@@ -50,6 +55,7 @@ describe("LogbookDialogComponent", (): void => {
             sessionId: new Date("2024-01-01T10:00:00Z").getTime(),
             startTime: 0,
             finishTime: 4000,
+            elapsedTime: 4000,
             distance: 50000,
             strokeCount: 60,
             deviceName: undefined as unknown as string,
@@ -63,7 +69,7 @@ describe("LogbookDialogComponent", (): void => {
             deleteSession: vi.fn(),
             export: vi.fn(),
             exportSessionToJson: vi.fn(),
-            exportSessionToTcx: vi.fn(),
+            exportSessionToFit: vi.fn(),
             exportSessionToCsv: vi.fn(),
             import: vi.fn(),
         };
@@ -84,12 +90,22 @@ describe("LogbookDialogComponent", (): void => {
             dismiss: vi.fn(),
         } as unknown as MatSnackBarRef<SnackBarConfirmComponent>);
 
+        routerSpy = {
+            createUrlTree: vi.fn().mockReturnValue({}),
+            serializeUrl: vi.fn().mockReturnValue("/session/123"),
+        };
+        locationSpy = {
+            prepareExternalUrl: vi.fn().mockReturnValue("/base/session/123"),
+        };
+
         await TestBed.configureTestingModule({
             imports: [LogbookDialogComponent],
             providers: [
                 { provide: MAT_DIALOG_DATA, useValue: SESSIONS },
                 { provide: DataRecorderService, useValue: dataRecorderSpy },
                 { provide: MatSnackBar, useValue: snackBarSpy },
+                { provide: Router, useValue: routerSpy },
+                { provide: Location, useValue: locationSpy },
             ],
         }).compileComponents();
 
@@ -207,10 +223,7 @@ describe("LogbookDialogComponent", (): void => {
                     const firstRowTimeCell = fixture.nativeElement.querySelector("mat-row .time");
                     expect(firstRowTimeCell).not.toBeNull();
                     expect(firstRowTimeCell.textContent.trim()).toContain(
-                        new SecondsToTimePipe().transform(
-                            (SESSIONS[1].finishTime - SESSIONS[1].startTime) / 1000,
-                            "pace",
-                        ),
+                        new SecondsToTimePipe().transform(SESSIONS[1].elapsedTime, "pace"),
                     );
                 });
 
@@ -226,10 +239,7 @@ describe("LogbookDialogComponent", (): void => {
                     const firstRowTimeCell = fixture.nativeElement.querySelector("mat-row .time");
                     expect(firstRowTimeCell).not.toBeNull();
                     expect(firstRowTimeCell.textContent.trim()).toContain(
-                        new SecondsToTimePipe().transform(
-                            (SESSIONS[0].finishTime - SESSIONS[0].startTime) / 1000,
-                            "pace",
-                        ),
+                        new SecondsToTimePipe().transform(SESSIONS[0].elapsedTime, "pace"),
                     );
                 });
             });
@@ -355,12 +365,12 @@ describe("LogbookDialogComponent", (): void => {
             expect(dataRecorderSpy.exportSessionToJson).toHaveBeenCalledWith(SESSIONS[0].sessionId);
         });
 
-        it("should call exportSessionToTcx with sessionId when TCX option clicked", async (): Promise<void> => {
+        it("should call exportSessionToFit with sessionId when FIT option clicked", async (): Promise<void> => {
             summaries$.next(SESSIONS);
 
-            await component.exportToTcx(SESSIONS[0].sessionId);
+            await component.exportToFit(SESSIONS[0].sessionId);
 
-            expect(dataRecorderSpy.exportSessionToTcx).toHaveBeenCalledWith(SESSIONS[0].sessionId);
+            expect(dataRecorderSpy.exportSessionToFit).toHaveBeenCalledWith(SESSIONS[0].sessionId);
         });
 
         it("should call exportSessionToCsv with sessionId when CSV option clicked", async (): Promise<void> => {
@@ -399,28 +409,28 @@ describe("LogbookDialogComponent", (): void => {
         });
     });
 
-    describe("exportToTcx method", (): void => {
+    describe("exportToFit method", (): void => {
         it("should call respective service method with the given sessionId", async (): Promise<void> => {
             // arrange
             summaries$.next(SESSIONS);
-            vi.mocked(dataRecorderSpy.exportSessionToTcx).mockResolvedValue();
+            vi.mocked(dataRecorderSpy.exportSessionToFit).mockResolvedValue();
 
-            await component.exportToTcx(SESSIONS[0].sessionId);
+            await component.exportToFit(SESSIONS[0].sessionId);
 
             // assert
-            expect(dataRecorderSpy.exportSessionToTcx).toHaveBeenCalledWith(SESSIONS[0].sessionId);
+            expect(dataRecorderSpy.exportSessionToFit).toHaveBeenCalledWith(SESSIONS[0].sessionId);
         });
 
-        it("shows snackbar on exportToTcx error", async (): Promise<void> => {
+        it("shows snackbar on exportToFit error", async (): Promise<void> => {
             // arrange
             summaries$.next(SESSIONS);
-            vi.mocked(dataRecorderSpy.exportSessionToTcx).mockRejectedValue(new Error("export tcx error"));
+            vi.mocked(dataRecorderSpy.exportSessionToFit).mockRejectedValue(new Error("export fit error"));
 
-            await component.exportToTcx(SESSIONS[0].sessionId);
+            await component.exportToFit(SESSIONS[0].sessionId);
 
             // assert
             expect(snackBarSpy.open).toHaveBeenCalledWith(
-                expect.stringMatching(/Error while downloading session: export tcx error/),
+                expect.stringMatching(/Error while downloading session: export fit error/),
                 "Dismiss",
             );
         });
@@ -740,6 +750,34 @@ describe("LogbookDialogComponent", (): void => {
             fileInput.dispatchEvent(new Event("change"));
 
             expect(dataRecorderSpy.import).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("openSession method", (): void => {
+        beforeEach((): void => {
+            vi.spyOn(window, "open").mockReturnValue(null);
+        });
+
+        afterEach((): void => {
+            vi.restoreAllMocks();
+        });
+
+        it("should open a new tab with the router-built session URL", (): void => {
+            component.openSession(SESSIONS[0].sessionId);
+
+            expect(routerSpy.createUrlTree).toHaveBeenCalledWith(["session", SESSIONS[0].sessionId]);
+            expect(locationSpy.prepareExternalUrl).toHaveBeenCalledWith("/session/123");
+            expect(window.open).toHaveBeenCalledWith("/base/session/123", "_blank");
+        });
+
+        it("should open correct URL when bar_chart button is clicked", async (): Promise<void> => {
+            summaries$.next(SESSIONS);
+            await fixture.whenStable();
+
+            const barChartButton = fixture.nativeElement.querySelector("mat-row .actions button");
+            barChartButton.click();
+
+            expect(window.open).toHaveBeenCalledWith("/base/session/123", "_blank");
         });
     });
 });

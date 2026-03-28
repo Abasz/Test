@@ -3,6 +3,7 @@ import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 import { ISessionData, ISessionSummary } from "../common.interfaces";
+import { IExportSession } from "../database.interfaces";
 import { appDB } from "../utils/app-database";
 
 import { DataRecorderService } from "./data-recorder.service";
@@ -57,7 +58,6 @@ describe("DataRecorderService", (): void => {
 
     const createMockSessionData = (): ISessionData => {
         return {
-            activityStartTime: new Date(mockTimeStamp),
             avgStrokePower: 150,
             distance: 5000,
             distPerStroke: 8,
@@ -67,6 +67,7 @@ describe("DataRecorderService", (): void => {
             speed: 4.2,
             strokeCount: 50,
             strokeRate: 24,
+            elapsedTime: 0,
             peakForce: 350,
             handleForces: [100, 200, 300],
             driveLength: 1.5,
@@ -184,6 +185,7 @@ describe("DataRecorderService", (): void => {
                 speed: sessionData.speed,
                 strokeCount: sessionData.strokeCount,
                 strokeRate: sessionData.strokeRate,
+                elapsedTime: sessionData.elapsedTime,
                 heartRate: undefined,
             });
         });
@@ -444,6 +446,7 @@ describe("DataRecorderService", (): void => {
                         speed: 4.0,
                         strokeCount: 55,
                         strokeRate: 22,
+                        elapsedTime: 1,
                     });
                     appDB.handleForces.put({
                         sessionId: testSessionId,
@@ -596,6 +599,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.2,
                     strokeCount: 50,
                     strokeRate: 24,
+                    elapsedTime: 1,
                 });
                 appDB.handleForces.put({
                     sessionId: testSessionId,
@@ -633,11 +637,12 @@ describe("DataRecorderService", (): void => {
             expect(clickedFiles[1]).toMatch(/deltaTimes.*\.json$/);
 
             const sessionContent = await createdBlobs[0].text();
-            const sessionData = JSON.parse(sessionContent) as Array<Record<string, unknown>>;
-            expect(Array.isArray(sessionData)).toBe(true);
-            expect(sessionData[0]).toHaveProperty("avgStrokePower");
-            expect(sessionData[0]).toHaveProperty("distance");
-            expect(sessionData[0]).toHaveProperty("strokeCount");
+            const exportData = JSON.parse(sessionContent) as IExportSession;
+            const records = exportData["records"];
+            expect(Array.isArray(records)).toBe(true);
+            expect(records[0]).toHaveProperty("avgStrokePower");
+            expect(records[0]).toHaveProperty("distance");
+            expect(records[0]).toHaveProperty("strokeCount");
 
             const deltaTimesContent = await createdBlobs[1].text();
             const deltaTimesData = JSON.parse(deltaTimesContent) as Array<number>;
@@ -659,11 +664,12 @@ describe("DataRecorderService", (): void => {
             expect(mockAnchor.download).toMatch(/\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - session\.json$/);
 
             const sessionContent = await createdBlobs[0].text();
-            const sessionData = JSON.parse(sessionContent) as Array<Record<string, unknown>>;
-            expect(Array.isArray(sessionData)).toBe(true);
-            expect(sessionData[0]).toHaveProperty("avgStrokePower");
-            expect(sessionData[0]).toHaveProperty("distance");
-            expect(sessionData[0]).toHaveProperty("strokeCount");
+            const exportData = JSON.parse(sessionContent) as Record<string, unknown>;
+            const records = exportData["records"] as Array<Record<string, unknown>>;
+            expect(Array.isArray(records)).toBe(true);
+            expect(records[0]).toHaveProperty("avgStrokePower");
+            expect(records[0]).toHaveProperty("distance");
+            expect(records[0]).toHaveProperty("strokeCount");
         });
 
         it("should create blob with correct JSON content type", async (): Promise<void> => {
@@ -672,6 +678,23 @@ describe("DataRecorderService", (): void => {
             expect(createObjectURLSpy).toHaveBeenCalled();
             const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
             expect(blobArg.type).toBe("application/json");
+        });
+
+        it("should include deviceName in exported JSON when connected device exists", async (): Promise<void> => {
+            const createdBlobs: Array<Blob> = [];
+            createObjectURLSpy.mockImplementation((blob: Blob): string => {
+                createdBlobs.push(blob);
+
+                return "blob:test-url";
+            });
+
+            await appDB.connectedDevice.put({ sessionId: testSessionId, deviceName: "ESP Rowing Monitor" });
+
+            await service.exportSessionToJson(testSessionId);
+
+            const sessionContent = await createdBlobs[0].text();
+            const sessionData = JSON.parse(sessionContent) as Record<string, unknown>;
+            expect(sessionData["deviceName"]).toBe("ESP Rowing Monitor");
         });
 
         describe("when Web Share API is available", (): void => {
@@ -705,7 +728,7 @@ describe("DataRecorderService", (): void => {
         });
     });
 
-    describe("exportSessionToTcx method", (): void => {
+    describe("exportSessionToFit method", (): void => {
         const testSessionId = 1700000000000;
         let createObjectURLSpy: Mock;
         let mockAnchor: { href: string; download: string; click: Mock };
@@ -730,6 +753,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.2,
                     strokeCount: 50,
                     strokeRate: 24,
+                    elapsedTime: 1,
                 });
                 appDB.handleForces.put({
                     sessionId: testSessionId,
@@ -742,60 +766,18 @@ describe("DataRecorderService", (): void => {
             });
         });
 
-        describe("in generated XML", (): void => {
-            it("should include XML declaration", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
+        it("should create FIT blob with correct download filename", async (): Promise<void> => {
+            await service.exportSessionToFit(testSessionId);
 
-                const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-                const content = await blobArg.text();
-                expect(content).toContain("<?xml");
-            });
-
-            it("should include TrainingCenterDatabase root element", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
-
-                const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-                const content = await blobArg.text();
-                expect(content).toContain("<TrainingCenterDatabase");
-            });
-
-            it("should include the Garmin TCX namespace on root element", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
-
-                const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-                const content = await blobArg.text();
-                expect(content).toContain("http://www.garmin.com/xmlschemas/TrainingCenterDatabase");
-            });
-
-            it("should include Activities section", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
-
-                const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-                const content = await blobArg.text();
-                expect(content).toContain("<Activities>");
-            });
-
-            it("should include Author section", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
-
-                const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-                const content = await blobArg.text();
-                expect(content).toContain("<Author");
-            });
-        });
-
-        it("should create TCX blob with correct download filename", async (): Promise<void> => {
-            await service.exportSessionToTcx(testSessionId);
-
-            expect(mockAnchor.download).toContain("session.tcx");
+            expect(mockAnchor.download).toContain("session.fit");
             expect(mockAnchor.click).toHaveBeenCalled();
         });
 
         it("should create blob with correct MIME type", async (): Promise<void> => {
-            await service.exportSessionToTcx(testSessionId);
+            await service.exportSessionToFit(testSessionId);
 
             const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
-            expect(blobArg.type).toBe("application/vnd.garmin.tcx+xml");
+            expect(blobArg.type).toBe("application/vnd.ant.fit");
         });
 
         describe("when Web Share API is available", (): void => {
@@ -806,18 +788,18 @@ describe("DataRecorderService", (): void => {
                 setupNavigatorWithShare(shareSpy);
             });
 
-            it("should use navigator.share for TCX export", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
+            it("should use navigator.share for FIT export", async (): Promise<void> => {
+                await service.exportSessionToFit(testSessionId);
 
                 expect(shareSpy).toHaveBeenCalled();
             });
 
-            it("should include TCX content in shared file", async (): Promise<void> => {
-                await service.exportSessionToTcx(testSessionId);
+            it("should include FIT content in shared file", async (): Promise<void> => {
+                await service.exportSessionToFit(testSessionId);
 
                 const shareData = shareSpy.mock.calls[0][0] as ShareData;
                 expect(shareData.files).toHaveLength(1);
-                expect(shareData.files![0].name).toContain(".tcx");
+                expect(shareData.files![0].name).toContain(".fit");
             });
         });
     });
@@ -848,6 +830,7 @@ describe("DataRecorderService", (): void => {
                     strokeCount: 50,
                     strokeRate: 24,
                     heartRate: { heartRate: 140, contactDetected: true },
+                    elapsedTime: 1,
                 });
                 appDB.handleForces.put({
                     sessionId: testSessionId,
@@ -1175,6 +1158,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.2,
                     strokeCount: 50,
                     strokeRate: 24,
+                    elapsedTime: 1,
                 });
                 appDB.sessionData.add({
                     sessionId: testSessionId2,
@@ -1188,6 +1172,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.5,
                     strokeCount: 60,
                     strokeRate: 26,
+                    elapsedTime: 1,
                 });
             });
 
@@ -1238,6 +1223,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.2,
                     strokeCount: 50,
                     strokeRate: 24,
+                    elapsedTime: 1,
                 });
                 appDB.sessionData.add({
                     sessionId: testSessionId2,
@@ -1251,6 +1237,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.5,
                     strokeCount: 60,
                     strokeRate: 26,
+                    elapsedTime: 1,
                 });
             });
 
@@ -1274,6 +1261,7 @@ describe("DataRecorderService", (): void => {
                     speed: 4.8,
                     strokeCount: 102,
                     strokeRate: 28,
+                    elapsedTime: 1,
                 });
             });
 

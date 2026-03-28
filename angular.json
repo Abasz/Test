@@ -23,7 +23,7 @@
                         },
                         "index": "src/index.html",
                         "allowedCommonJsDependencies": [
-                            "js2xmlparser",
+                            "hammerjs",
                             "js-md5"
                         ],
                         "tsConfig": "tsconfig.app.json",

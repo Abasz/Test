@@ -1,0 +1,63 @@
+<mat-toolbar class="gap-8">
+    <button mat-icon-button (click)="goBack()" aria-label="Back to dashboard">
+        <mat-icon>arrow_back</mat-icon>
+    </button>
+
+    <mat-form-field subscriptSizing="dynamic">
+        <input
+            matInput
+            [formControl]="filterControl"
+            [matAutocomplete]="sessionAuto"
+            (focus)="filterControl.setValue('')"
+        />
+        <mat-autocomplete
+            #sessionAuto="matAutocomplete"
+            (optionSelected)="onSessionSelected($event.option.value)"
+            (opened)="selectActiveOption()"
+            (closed)="onAutocompleteClosed()"
+        >
+            @for (session of filteredSessions(); track session.sessionId) {
+                <mat-option [value]="session.sessionId">
+                    <div class="flex-col">
+                        <span>{{ session.sessionId | date: "yyyy-MM-dd HH:mm" }}</span>
+                        <span class="details">
+                            {{ session.distance / 100 | number: "1.0-0" }}m ·
+                            {{ session.elapsedTime | secondsToTime: "pace" }}
+                        </span>
+                    </div>
+                </mat-option>
+            }
+        </mat-autocomplete>
+    </mat-form-field>
+
+    <button mat-icon-button (click)="fileInput.click()" aria-label="Open JSON file">
+        <mat-icon>upload_file</mat-icon>
+    </button>
+    <input #fileInput hidden type="file" accept=".json" (change)="onFileSelected($event)" />
+
+    <span class="flex-1"></span>
+
+    @if (!error() && analysis()?.deviceName; as deviceName) {
+        <span class="device-name xs-hide">{{ deviceName }}</span>
+    }
+</mat-toolbar>
+@if (loading()) {
+    <div class="loading-container flex-col items-center justify-center gap-16">
+        <mat-spinner diameter="70"></mat-spinner>
+        <p>Loading session...</p>
+    </div>
+} @else if (error(); as errorMessage) {
+    <div class="error-container flex-col items-center justify-center gap-16">
+        <p>{{ errorMessage }}</p>
+        <button mat-raised-button (click)="goBack()">Back to Dashboard</button>
+    </div>
+} @else if (analysis(); as data) {
+    <mat-tab-group class="flex-1">
+        <mat-tab label="Summary">
+            <app-session-summary [analysis]="data" />
+        </mat-tab>
+        <mat-tab label="Strokes">
+            <app-session-strokes [strokes]="data.strokes" [laps]="data.laps" />
+        </mat-tab>
+    </mat-tab-group>
+}

@@ -30,7 +30,7 @@ jobs:
       - name:  Build binaries for all rowers and board profiles
         run: |
           echo "🔨 Building binaries"
-          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom)).*')
+          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom|dynamic|kayak|generic)).*')
           echo
           echo "Environments:"
           mapfile -t env_array <<< "$environments"

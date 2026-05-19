@@ -1,5 +1,6 @@
 import { Injectable, Signal, signal, WritableSignal } from "@angular/core";
 import { takeUntilDestroyed, toSignal } from "@angular/core/rxjs-interop";
+import { MatSnackBar } from "@angular/material/snack-bar";
 import {
     BehaviorSubject,
     combineLatest,
@@ -22,10 +23,12 @@ import {
 } from "rxjs";
 
 import {
+    AutoLapMode,
     Config,
     ICalculatedMetrics,
     IErgConnectionStatus,
     IHeartRate,
+    IIntervalsIcuConfig,
     IRawCalculatedMetrics,
     SessionState,
 } from "../common.interfaces";
@@ -34,6 +37,7 @@ import { Stopwatch } from "../utils/stopwatch";
 import { ConfigManagerService } from "./config-manager.service";
 import { DataRecorderService } from "./data-recorder.service";
 import { ErgConnectionService } from "./ergometer/erg-connection.service";
+import { IntervalsIcuService } from "./intervals-icu.service";
 import { MetricsService } from "./metrics.service";
 
 const ZERO_RAW_METRICS: IRawCalculatedMetrics = {
@@ -45,6 +49,7 @@ const ZERO_RAW_METRICS: IRawCalculatedMetrics = {
     rawStrokeCount: 0,
     handleForces: [],
     peakForce: 0,
+    peakForcePositionNorm: 0,
     strokeRate: 0,
     speed: 0,
     distPerStroke: 0,
@@ -66,6 +71,8 @@ export class SessionManagerService {
 
     private sessionState$: BehaviorSubject<SessionState> = new BehaviorSubject<SessionState>("stopped");
     private _elapsedTime: WritableSignal<number> = signal<number>(0);
+    private readonly lapCount: WritableSignal<number> = signal<number>(0);
+    private readonly currentStrokeCount: Signal<number>;
 
     private readonly autoStartSeed$: Subject<IRawCalculatedMetrics> = new Subject<IRawCalculatedMetrics>();
     private readonly sessionSeed: Observable<IRawCalculatedMetrics> = merge(
@@ -88,10 +95,20 @@ export class SessionManagerService {
 
     private readonly autoStartEnabled: Signal<boolean> = toSignal(
         this.configManager.configChanged$.pipe(
-            map((config: Config): boolean => config.general.autoStartTimer),
+            map((config: Config): boolean => config.general.session.autoSession !== "off"),
         ),
         { initialValue: true },
     );
+
+    private readonly autoPauseEnabled: Signal<boolean> = toSignal(
+        this.configManager.configChanged$.pipe(
+            map((config: Config): boolean => config.general.session.autoSession === "autoStartAndPause"),
+        ),
+        { initialValue: false },
+    );
+
+    private hasSeenNonZeroSpeed: boolean = false;
+    private readonly resetAutoLap$: Subject<void> = new Subject<void>();
 
     private indicateStop$: Observable<SessionState> = this.sessionState$.pipe(
         filter((sessionState: SessionState): boolean => sessionState === "stopped"),
@@ -102,6 +119,8 @@ export class SessionManagerService {
         private dataRecorder: DataRecorderService,
         private ergConnectionService: ErgConnectionService,
         private configManager: ConfigManagerService,
+        private intervalsService: IntervalsIcuService,
+        private snackBar: MatSnackBar,
     ) {
         this.sessionState = toSignal(this.sessionState$, { requireSync: true });
         this.elapsedTime = this._elapsedTime.asReadonly();
@@ -116,7 +135,7 @@ export class SessionManagerService {
             withLatestFrom(this.sessionSeed),
             map(
                 ([, seedRaw]: [SessionState, IRawCalculatedMetrics]): SessionAccumulator => ({
-                    sessionMetrics: { ...seedRaw, distance: 0, strokeCount: 0 },
+                    sessionMetrics: { ...seedRaw, distance: 0, strokeCount: 0, totalWork: 0 },
                     previousRawMetrics: seedRaw,
                 }),
             ),
@@ -152,6 +171,11 @@ export class SessionManagerService {
             shareReplay({ bufferSize: 1, refCount: true }),
         );
 
+        this.currentStrokeCount = toSignal(
+            this.sessionMetrics$.pipe(map((metrics: ICalculatedMetrics): number => metrics.strokeCount)),
+            { initialValue: 0 },
+        );
+
         this.sessionState$
             .pipe(
                 switchMap((state: SessionState): typeof EMPTY | ReturnType<typeof interval> =>
@@ -165,6 +189,18 @@ export class SessionManagerService {
 
         this.setupAutoStart();
         this.setupRecording();
+        this.setupAutoLap();
+        this.setupAutoPause();
+    }
+
+    addLap(): void {
+        if (this.sessionState() !== "running") {
+            return;
+        }
+        this.resetAutoLap$.next();
+        void this.dataRecorder.addLap(this.currentStrokeCount(), "manual");
+        this.lapCount.update((count: number): number => count + 1);
+        this.snackBar.open(`Lap ${this.lapCount()}`, "Dismiss", { duration: 3000 });
     }
 
     start(timeOffset: number = 0): void {
@@ -191,6 +227,7 @@ export class SessionManagerService {
             return;
         }
 
+        void this.dataRecorder.addLap(this.currentStrokeCount(), "manual", true);
         this.stopwatch.pause();
         this.sessionState$.next("paused");
     }
@@ -200,8 +237,22 @@ export class SessionManagerService {
             return;
         }
 
+        const sessionId = this.dataRecorder.currentSessionId;
+        this.hasSeenNonZeroSpeed = false;
+        this.lapCount.set(0);
         this.stopwatch.stop();
         this.sessionState$.next("stopped");
+        void this.handleAutoUpload(sessionId);
+    }
+
+    private async handleAutoUpload(sessionId: number): Promise<void> {
+        const { intervalsIcu }: { intervalsIcu: IIntervalsIcuConfig } =
+            this.configManager.getGroup("general");
+
+        if (!intervalsIcu.autoUploadEnabled || !intervalsIcu.apiKey) {
+            return;
+        }
+        await this.intervalsService.uploadSession(sessionId, intervalsIcu);
     }
 
     private setupAutoStart(): void {
@@ -261,6 +312,85 @@ export class SessionManagerService {
             });
     }
 
+    private setupAutoLap(): void {
+        let lastLapValue = 0;
+
+        merge(
+            this.resetAutoLap$,
+            this.configManager.configChanged$.pipe(
+                map((config: Config): AutoLapMode => config.general.session.autoLap),
+                distinctUntilChanged(),
+            ),
+        )
+            .pipe(
+                withLatestFrom(this.sessionMetrics$, this.configManager.configChanged$),
+                takeUntilDestroyed(),
+            )
+            .subscribe(([, metrics, config]: [unknown, ICalculatedMetrics, Config]): void => {
+                lastLapValue =
+                    config.general.session.autoLap === "distance"
+                        ? metrics.distance / 100
+                        : this.stopwatch.elapsedSeconds() / 60;
+            });
+
+        this.sessionMetrics$
+            .pipe(
+                withLatestFrom(this.configManager.configChanged$),
+                filter(
+                    ([, config]: [ICalculatedMetrics, Config]): boolean =>
+                        config.general.session.autoLap !== "off",
+                ),
+                filter(([metrics, config]: [ICalculatedMetrics, Config]): boolean => {
+                    const currentValue =
+                        config.general.session.autoLap === "distance"
+                            ? metrics.distance / 100
+                            : this.stopwatch.elapsedSeconds() / 60;
+
+                    if (currentValue < lastLapValue) {
+                        lastLapValue = currentValue;
+                    }
+
+                    if (currentValue - lastLapValue >= config.general.session.autoLapValue) {
+                        lastLapValue += config.general.session.autoLapValue;
+
+                        return true;
+                    }
+
+                    return false;
+                }),
+                takeUntilDestroyed(),
+            )
+            .subscribe(([metrics, config]: [ICalculatedMetrics, Config]): void => {
+                void this.dataRecorder.addLap(
+                    metrics.strokeCount,
+                    config.general.session.autoLap as Exclude<AutoLapMode, "off">,
+                );
+                this.lapCount.update((count: number): number => count + 1);
+                this.snackBar.open(`Lap ${this.lapCount()}`, "Dismiss", { duration: 3000 });
+            });
+    }
+
+    private setupAutoPause(): void {
+        this.metricsService.rawMetrics$
+            .pipe(
+                filter((): boolean => this.autoPauseEnabled() && this.sessionState() === "running"),
+                takeUntilDestroyed(),
+            )
+            .subscribe((metrics: IRawCalculatedMetrics): void => {
+                if (metrics.speed > 0) {
+                    this.hasSeenNonZeroSpeed = true;
+
+                    return;
+                }
+
+                if (!this.hasSeenNonZeroSpeed) {
+                    return;
+                }
+
+                this.pause();
+            });
+    }
+
     private static accumulateSessionMetrics(
         sessionMetrics: SessionAccumulator,
         currentMetrics: IRawCalculatedMetrics,
@@ -289,6 +419,12 @@ export class SessionManagerService {
                 strokeCount:
                     sessionMetrics.sessionMetrics.strokeCount +
                     Math.max(0, currentRawStrokeCount - prevStrokeCount),
+                totalWork:
+                    sessionMetrics.sessionMetrics.totalWork +
+                    (currentRawStrokeCount > prevStrokeCount
+                        ? currentMetrics.avgStrokePower *
+                          (currentMetrics.driveDuration + currentMetrics.recoveryDuration)
+                        : 0),
             },
             previousRawMetrics: currentMetrics,
         };

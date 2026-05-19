@@ -59,12 +59,31 @@ export interface IMediaQuery {
 
 export type HeartRateMonitorMode = "ant" | "ble" | "off";
 export type UnitSystem = "metric" | "imperial";
+export type AutoSessionMode = "off" | "autoStart" | "autoStartAndPause";
+export type AutoLapMode = "off" | "distance" | "time";
 
-export interface IGeneralConfig {
+export interface IGeneralDeviceConfig {
     ergoMonitorBleId: string;
     heartRateBleId: string;
     heartRateMonitor: HeartRateMonitorMode;
-    autoStartTimer: boolean;
+}
+
+export interface IGeneralSessionConfig {
+    autoSession: AutoSessionMode;
+    autoLap: AutoLapMode;
+    autoLapValue: number;
+}
+
+export interface IIntervalsIcuConfig {
+    apiKey: string;
+    athleteId: string;
+    autoUploadEnabled: boolean;
+}
+
+export interface IGeneralConfig {
+    device: IGeneralDeviceConfig;
+    session: IGeneralSessionConfig;
+    intervalsIcu: IIntervalsIcuConfig;
 }
 
 export interface IDisplayGeneralConfig {
@@ -111,10 +130,21 @@ export interface IDisplayConfig {
 
 export class Config {
     general: IGeneralConfig = {
-        ergoMonitorBleId: "",
-        heartRateBleId: "",
-        heartRateMonitor: "off",
-        autoStartTimer: true,
+        device: {
+            ergoMonitorBleId: "",
+            heartRateBleId: "",
+            heartRateMonitor: "off",
+        },
+        session: {
+            autoSession: "autoStart",
+            autoLap: "off",
+            autoLapValue: 500,
+        },
+        intervalsIcu: {
+            apiKey: "",
+            athleteId: "",
+            autoUploadEnabled: false,
+        },
     };
 
     display: IDisplayConfig = {
@@ -170,14 +200,19 @@ export interface ICalculatedMetrics extends Omit<IExtendedMetrics & IBaseMetrics
     speed: number;
     strokeRate: number;
     peakForce: number;
+    peakForcePositionNorm: number;
     distPerStroke: number;
     driveLength: number;
     handleForces: Array<number>;
+    totalWork: number;
 }
 
 export type SessionState = "running" | "paused" | "stopped";
 
-export interface IRawCalculatedMetrics extends Omit<ICalculatedMetrics, "distance" | "strokeCount"> {
+export interface IRawCalculatedMetrics extends Omit<
+    ICalculatedMetrics,
+    "distance" | "strokeCount" | "totalWork"
+> {
     rawDistance: number;
     rawStrokeCount: number;
 }
@@ -195,6 +230,11 @@ export interface ISessionSummary {
     elapsedTime: number;
     distance: number;
     strokeCount: number;
+}
+
+export interface ILogbookDialogData {
+    summaries: Array<ISessionSummary>;
+    uploadedSessionIds: Array<number>;
 }
 
 export interface IHeartRate {

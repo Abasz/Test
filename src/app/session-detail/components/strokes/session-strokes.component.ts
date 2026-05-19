@@ -15,30 +15,66 @@ import { MatIconButton } from "@angular/material/button";
 import { MatIcon } from "@angular/material/icon";
 import { MatSliderModule } from "@angular/material/slider";
 import { MatTooltip } from "@angular/material/tooltip";
-import { ChartData, ChartOptions, Point } from "chart.js";
+import { ChartData, ChartOptions, ChartTypeRegistry, Point, TooltipItem } from "chart.js";
+import { Context } from "chartjs-plugin-datalabels";
 
 import { ILap, ISessionStroke } from "../../models/session-analysis.interfaces";
 import { SessionChartComponent } from "../shared/session-chart.component";
-import { StrokeInspectorComponent } from "../shared/stroke-inspector.component";
+
+import { StrokeInspectorComponent } from "./stroke-inspector.component";
 
 const FORCE_CURVE_COLOR = "#11a9ed";
 const HIGHLIGHT_COLOR = "#ff6b35";
+const PEAK_MARKER_COLOR = "#e53935";
 
 interface IContinuousForceCurveData {
     chartData: ChartData;
     strokeOffsets: Array<number>;
 }
 
-const buildSingleStrokeForceCurve = (stroke: ISessionStroke): ChartData => ({
-    datasets: [
-        {
-            data: stroke.handleForces.map((force: number, index: number): Point => ({ x: index, y: force })),
-            borderColor: FORCE_CURVE_COLOR,
-            fill: false,
-            label: "Force",
-        },
-    ],
-});
+const buildSingleStrokeForceCurve = (stroke: ISessionStroke, chartMaxY: number): ChartData => {
+    const forcePoints = stroke.handleForces.map(
+        (force: number, index: number): Point => ({ x: index, y: force }),
+    );
+
+    const peakIndex = Math.round(
+        (stroke.peakForcePositionNorm / 100) * Math.max(0, stroke.handleForces.length - 1),
+    );
+
+    return {
+        datasets: [
+            {
+                data: forcePoints,
+                borderColor: FORCE_CURVE_COLOR,
+                fill: false,
+                label: "Force",
+            },
+            {
+                data: [
+                    { x: peakIndex, y: 0 },
+                    { x: peakIndex, y: stroke.peakForce },
+                    { x: peakIndex, y: chartMaxY },
+                ],
+                borderColor: PEAK_MARKER_COLOR,
+                borderDash: [4, 4],
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+                label: "Peak Position",
+                datalabels: {
+                    display: (ctx: Context): boolean => ctx.dataIndex === 1,
+                    anchor: "end",
+                    align: -45,
+                    offset: 8,
+                    formatter: (): string =>
+                        `Peak: ${Math.round(stroke.peakForce)}N @ ${Math.round(stroke.peakForcePositionNorm)}%`,
+                    color: PEAK_MARKER_COLOR,
+                    font: { size: 12, weight: "bold" },
+                },
+            },
+        ],
+    };
+};
 
 const buildContinuousForceCurveData = (strokes: Array<ISessionStroke>): IContinuousForceCurveData => {
     const points: Array<Point> = [];
@@ -100,9 +136,11 @@ export class SessionStrokesComponent {
 
     readonly maxIndex: Signal<number> = computed((): number => Math.max(0, this.strokes().length - 1));
 
-    readonly singleStrokeForceCurve: Signal<ChartData> = computed(
-        (): ChartData => buildSingleStrokeForceCurve(this.currentStroke()),
-    );
+    readonly singleStrokeForceCurve: Signal<ChartData> = computed((): ChartData => {
+        const maxForce = computeMaxForce(this.strokes());
+
+        return buildSingleStrokeForceCurve(this.currentStroke(), maxForce * 1.05);
+    });
 
     readonly singleStrokeChartOptions: Signal<ChartOptions> = computed((): ChartOptions => {
         const maxForce = computeMaxForce(this.strokes());
@@ -119,10 +157,17 @@ export class SessionStrokesComponent {
                 },
                 y: {
                     min: 0,
-                    max: maxForce * 1.1,
+                    max: maxForce * 1.05,
                 },
             },
             plugins: {
+                tooltip: {
+                    filter: (tooltipItem: TooltipItem<keyof ChartTypeRegistry>): boolean =>
+                        tooltipItem.dataset.label !== "Peak Position",
+                    callbacks: {
+                        title: (): string => "",
+                    },
+                },
                 zoom: {
                     pan: { enabled: false },
                     zoom: { wheel: { enabled: false }, drag: { enabled: false } },
@@ -187,6 +232,11 @@ export class SessionStrokesComponent {
                 },
             },
             plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: (): string => "",
+                    },
+                },
                 decimation: {
                     enabled: true,
                     algorithm: "lttb",

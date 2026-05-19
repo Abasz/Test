@@ -22,6 +22,7 @@ const createMockStrokes = (count: number): Array<ISessionStroke> =>
             dragFactor: 110,
             heartRate: undefined,
             peakForce: 350,
+            peakForcePositionNorm: 50,
             driveLength: 1.3,
             handleForces: [100, 200, 350, 200, 100],
         }),
@@ -105,8 +106,9 @@ describe("SessionStrokesComponent", (): void => {
         it("should build single stroke force curve from current stroke", (): void => {
             const chartData = component.singleStrokeForceCurve();
 
-            expect(chartData.datasets).toHaveLength(1);
+            expect(chartData.datasets).toHaveLength(2);
             expect(chartData.datasets[0].data).toHaveLength(5);
+            expect(chartData.datasets[1].label).toBe("Peak Position");
         });
 
         it("should update single stroke force curve when index changes", (): void => {
@@ -130,6 +132,18 @@ describe("SessionStrokesComponent", (): void => {
             expect(chartData.datasets[1].label).toBe("Current");
         });
 
+        it("should place peak marker vertical line at max force index", (): void => {
+            const chartData = component.singleStrokeForceCurve();
+            const peakDataset = chartData.datasets[1];
+            const points = peakDataset.data as Array<{ x: number; y: number }>;
+
+            expect(points).toHaveLength(3);
+            expect(points[0].x).toBe(2);
+            expect(points[0].y).toBe(0);
+            expect(points[1].x).toBe(2);
+            expect(points[1].y).toBe(350);
+        });
+
         it("should update highlight dataset when stroke index changes", (): void => {
             component.currentStrokeIndex.set(3);
             const chartData = component.continuousChartData();
@@ -150,7 +164,7 @@ describe("SessionStrokesComponent", (): void => {
             const yScale = options.scales?.y as { min: number; max: number };
 
             expect(yScale.min).toBe(0);
-            expect(yScale.max).toBeCloseTo(385);
+            expect(yScale.max).toBeCloseTo(367.5);
         });
 
         it("should disable zoom on single stroke chart", (): void => {

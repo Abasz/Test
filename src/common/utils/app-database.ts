@@ -4,16 +4,20 @@ import {
     IConnectedDeviceEntity,
     IDeltaTimesEntity,
     IHandleForcesEntity,
+    ILapEntity,
     IMetricsEntity,
+    ISessionUploadEntity,
 } from "../database.interfaces";
 
 export class AppDB extends Dexie {
-    static dbVersion: number = 3;
+    static dbVersion: number = 4;
 
     connectedDevice!: Table<IConnectedDeviceEntity, number>;
     deltaTimes!: Table<IDeltaTimesEntity, number>;
     handleForces!: Table<IHandleForcesEntity, number>;
+    laps!: Table<ILapEntity, number>;
     sessionData!: Table<IMetricsEntity, number>;
+    sessionUploads!: Table<ISessionUploadEntity, number>;
 
     private upgradeProgressCallback: ((processed: number, total: number) => void) | undefined;
 
@@ -56,6 +60,9 @@ export class AppDB extends Dexie {
                 await Promise.all([
                     handleForcesTable.toCollection().modify((record: IHandleForcesEntity): void => {
                         reportProgress();
+
+                        delete (record as IHandleForcesEntity & { peakForce?: number })?.peakForce;
+
                         if (record.driveLength !== undefined) {
                             return;
                         }
@@ -74,6 +81,15 @@ export class AppDB extends Dexie {
 
                 console.log("Version 3 migration completed");
             });
+
+        this.version(AppDB.dbVersion).stores({
+            deltaTimes: "&timeStamp, sessionId",
+            handleForces: "&timeStamp, sessionId, [sessionId+strokeId]",
+            sessionData: "&timeStamp, sessionId",
+            connectedDevice: "&sessionId",
+            laps: "&timeStamp, sessionId",
+            sessionUploads: "&sessionId",
+        });
     }
 
     setUpgradeProgressCallback(fn: ((processed: number, total: number) => void) | undefined): void {

@@ -1,4 +1,4 @@
-import { ICalculatedMetrics, IDisplayConfig } from "../../../common/common.interfaces";
+import { ICalculatedMetrics } from "../../../common/common.interfaces";
 
 /**
  * Creates a mock ICalculatedMetrics object with sensible defaults.
@@ -13,34 +13,11 @@ export const createMockMetrics = (overrides?: Partial<ICalculatedMetrics>): ICal
     strokeCount: 0,
     handleForces: [],
     peakForce: 0,
+    peakForcePositionNorm: 0,
     strokeRate: 0,
     speed: 0,
     distPerStroke: 0,
     driveLength: 0,
-    ...overrides,
-});
-
-/**
- * Creates a mock IDisplayConfig object with sensible defaults.
- * Override any top-level property by passing a partial object.
- */
-export const createMockDisplayConfig = (overrides?: Partial<IDisplayConfig>): IDisplayConfig => ({
-    general: {
-        unitSystem: "metric",
-    },
-    forceCurve: {
-        showPeakForceInTitle: true,
-        showGridLines: true,
-        showAxisLabels: true,
-    },
-    layout: {
-        landscape: { tiles: [] },
-        portrait: { tiles: [] },
-        orientationLock: "auto",
-    },
-    averaging: {
-        mode: "off",
-        windowSize: 3,
-    },
+    totalWork: 0,
     ...overrides,
 });

@@ -1,6 +1,6 @@
 @use "@angular/material" as mat;
 
-@use "../../../flex-layout" as flex-layout;
+@use "../../../flex-layout-mixins.scss" as flex-layout;
 
 :host {
     @media (max-height: 399px) {
@@ -39,6 +39,10 @@ mat-toolbar {
 
     > .time-of-day {
         justify-self: center;
+
+        @media (max-width: 399px) {
+            display: none;
+        }
     }
 
     > .title {

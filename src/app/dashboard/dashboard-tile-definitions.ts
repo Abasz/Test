@@ -6,7 +6,7 @@ import {
     IDisplayConfig,
     IHeartRate,
 } from "../../common/common.interfaces";
-import { TileDefinition } from "../settings-dialog/tile-layout-editor/utils/tile-layout.interfaces";
+import { TileDefinition } from "../dialogs/settings-dialog/tile-layout-editor/utils/tile-layout.interfaces";
 
 import { DistPerStrokeTileComponent } from "./tiles/dist-per-stroke-tile.component";
 import { DistanceTileComponent } from "./tiles/distance-tile.component";
@@ -16,6 +16,7 @@ import { DriveTileComponent } from "./tiles/drive-tile.component";
 import { ForceCurveTileComponent } from "./tiles/force-curve-tile.component";
 import { HeartRateTileComponent } from "./tiles/heart-rate-tile.component";
 import { PaceTileComponent } from "./tiles/pace-tile.component";
+import { PeakForcePositionTileComponent } from "./tiles/peak-force-position-tile.component";
 import { PeakForceTileComponent } from "./tiles/peak-force-tile.component";
 import { PowerTileComponent } from "./tiles/power-tile.component";
 import { RecoveryTileComponent } from "./tiles/recovery-tile.component";
@@ -23,6 +24,7 @@ import { SpeedTileComponent } from "./tiles/speed-tile.component";
 import { StrokeRateTileComponent } from "./tiles/stroke-rate-tile.component";
 import { TimerTileComponent } from "./tiles/timer-tile.component";
 import { TotalStrokesTileComponent } from "./tiles/total-strokes-tile.component";
+import { TotalWorkTileComponent } from "./tiles/total-work-tile.component";
 
 export interface DashboardContext {
     rowingData: ICalculatedMetrics;
@@ -226,6 +228,17 @@ const TILE_REGISTRY = {
         component: PeakForceTileComponent,
         context: ["rowingData"],
     },
+    PeakForcePositionNorm: {
+        id: "peakForcePositionNorm" as const,
+        label: "Peak Position",
+        icon: "vertical_align_center",
+        defaultRowSpan: 1,
+        defaultColumnSpan: 1,
+        minRowSpan: 1,
+        minColumnSpan: 1,
+        component: PeakForcePositionTileComponent,
+        context: ["rowingData"],
+    },
     Speed: {
         id: "speed" as const,
         label: "Speed",
@@ -236,6 +249,17 @@ const TILE_REGISTRY = {
         minColumnSpan: 1,
         component: SpeedTileComponent,
         context: ["rowingData", "displayConfig"],
+    },
+    TotalWork: {
+        id: "totalWork" as const,
+        label: "Total Work",
+        icon: "local_fire_department",
+        defaultRowSpan: 1,
+        defaultColumnSpan: 1,
+        minRowSpan: 1,
+        minColumnSpan: 1,
+        component: TotalWorkTileComponent,
+        context: ["rowingData"],
     },
 } satisfies Record<string, TileRegistryEntry>;
 

@@ -8,7 +8,7 @@ import { MatDialog } from "@angular/material/dialog";
 import { MatIconHarness } from "@angular/material/icon/testing";
 import { MatToolbarHarness } from "@angular/material/toolbar/testing";
 import { MatTooltipHarness } from "@angular/material/tooltip/testing";
-import { BehaviorSubject } from "rxjs";
+import { BehaviorSubject, of } from "rxjs";
 import { map } from "rxjs/operators";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,7 @@ import {
     Config,
     IErgConnectionStatus,
     IHRConnectionStatus,
+    ILogbookDialogData,
     IRowerSettings,
     ISessionSummary,
     SessionState,
@@ -28,6 +29,7 @@ import { ErgConnectionService } from "../../../common/services/ergometer/erg-con
 import { ErgGenericDataService } from "../../../common/services/ergometer/erg-generic-data.service";
 import { ErgSettingsService } from "../../../common/services/ergometer/erg-settings.service";
 import { HeartRateService } from "../../../common/services/heart-rate/heart-rate.service";
+import { IntervalsIcuService } from "../../../common/services/intervals-icu.service";
 import { MetricsService } from "../../../common/services/metrics.service";
 import { SessionManagerService } from "../../../common/services/session-manager.service";
 import { UtilsService } from "../../../common/services/utils.service";
@@ -39,7 +41,10 @@ describe("SettingsBarComponent", (): void => {
     let fixture: ComponentFixture<SettingsBarComponent>;
     let loader: HarnessLoader;
 
-    let mockSessionManagerService: Pick<SessionManagerService, "start" | "stop" | "pause" | "sessionState">;
+    let mockSessionManagerService: Pick<
+        SessionManagerService,
+        "start" | "stop" | "pause" | "addLap" | "sessionState"
+    >;
     let mockSessionState: WritableSignal<SessionState>;
     let mockMetricsService: Pick<MetricsService, "hrConnectionStatus$">;
     let mockDataRecorderService: Pick<DataRecorderService, "getSessionSummaries$">;
@@ -50,6 +55,8 @@ describe("SettingsBarComponent", (): void => {
     let mockUtilsService: Pick<UtilsService, "mainSpinner">;
     let mockConfigManagerService: Pick<ConfigManagerService, "configChanged$">;
     let mockHeartRateService: Pick<HeartRateService, "discover">;
+
+    let mockIntervalsIcuService: Pick<IntervalsIcuService, "getUploadedSessionIds$">;
 
     let batteryLevelSubject: BehaviorSubject<number>;
     let ergConnectionStatusSubject: BehaviorSubject<IErgConnectionStatus>;
@@ -132,6 +139,7 @@ describe("SettingsBarComponent", (): void => {
             start: vi.fn(),
             stop: vi.fn(),
             pause: vi.fn(),
+            addLap: vi.fn(),
             sessionState: mockSessionState,
         };
 
@@ -164,6 +172,9 @@ describe("SettingsBarComponent", (): void => {
         mockHeartRateService = {
             discover: vi.fn(),
         };
+        mockIntervalsIcuService = {
+            getUploadedSessionIds$: vi.fn().mockReturnValue(of([])),
+        };
 
         vi.mocked(mockDataRecorderService.getSessionSummaries$).mockReturnValue(
             sessionsSubject.asObservable(),
@@ -192,6 +203,7 @@ describe("SettingsBarComponent", (): void => {
                 { provide: UtilsService, useValue: mockUtilsService },
                 { provide: ConfigManagerService, useValue: mockConfigManagerService },
                 { provide: HeartRateService, useValue: mockHeartRateService },
+                { provide: IntervalsIcuService, useValue: mockIntervalsIcuService },
             ],
         }).compileComponents();
 
@@ -511,6 +523,11 @@ describe("SettingsBarComponent", (): void => {
             expect(mockDataRecorderService.getSessionSummaries$).toHaveBeenCalled();
         });
 
+        it("should call getUploadedSessionIds$", (): void => {
+            component.openLogbook();
+            expect(mockIntervalsIcuService.getUploadedSessionIds$).toHaveBeenCalled();
+        });
+
         it("should close main spinner on success", (): void => {
             component.openLogbook();
             expect(mockSpinner.close).toHaveBeenCalled();
@@ -521,7 +538,26 @@ describe("SettingsBarComponent", (): void => {
             expect(mockMatDialog.open).toHaveBeenCalledWith(
                 expect.any(Function),
                 expect.objectContaining({
-                    data: mockSessionSummaries,
+                    data: {
+                        summaries: mockSessionSummaries,
+                        uploadedSessionIds: [],
+                    } satisfies ILogbookDialogData,
+                }),
+            );
+        });
+
+        it("should forward non-empty uploaded session IDs to dialog data", (): void => {
+            vi.mocked(mockIntervalsIcuService.getUploadedSessionIds$).mockReturnValue(of([101, 202]));
+
+            component.openLogbook();
+
+            expect(mockMatDialog.open).toHaveBeenCalledWith(
+                expect.any(Function),
+                expect.objectContaining({
+                    data: {
+                        summaries: mockSessionSummaries,
+                        uploadedSessionIds: [101, 202],
+                    } satisfies ILogbookDialogData,
                 }),
             );
         });
@@ -543,7 +579,7 @@ describe("SettingsBarComponent", (): void => {
             expect(mockMatDialog.open).toHaveBeenCalledWith(
                 expect.any(Function),
                 expect.objectContaining({
-                    data: [],
+                    data: { summaries: [], uploadedSessionIds: [] } satisfies ILogbookDialogData,
                 }),
             );
         });
@@ -578,6 +614,22 @@ describe("SettingsBarComponent", (): void => {
 
                 expect(mockMatDialog.open).not.toHaveBeenCalled();
             });
+
+            it("should close spinner and not open dialog when uploaded IDs loading fails", (): void => {
+                const testError = new Error("Uploaded IDs error");
+                vi.mocked(mockIntervalsIcuService.getUploadedSessionIds$).mockReturnValue(
+                    new BehaviorSubject<Array<number>>([]).pipe(
+                        map((): Array<number> => {
+                            throw testError;
+                        }),
+                    ),
+                );
+
+                component.openLogbook();
+
+                expect(mockSpinner.close).toHaveBeenCalled();
+                expect(mockMatDialog.open).not.toHaveBeenCalled();
+            });
         });
     });
 
@@ -592,6 +644,13 @@ describe("SettingsBarComponent", (): void => {
         it("should call sessionManager stop", (): void => {
             component.stopSession();
             expect(mockSessionManagerService.stop).toHaveBeenCalled();
+        });
+    });
+
+    describe("addLap method", (): void => {
+        it("should call sessionManager addLap", (): void => {
+            component.addLap();
+            expect(mockSessionManagerService.addLap).toHaveBeenCalled();
         });
     });
 
@@ -661,6 +720,40 @@ describe("SettingsBarComponent", (): void => {
                 const tooltip = await button.host();
                 const tooltipText = await tooltip.getAttribute("matTooltip");
                 expect(tooltipText).toBe("Stop");
+            });
+        });
+
+        describe("lap button click", (): void => {
+            beforeEach((): void => {
+                mockSessionState.set("running");
+                fixture.detectChanges();
+            });
+
+            it("should trigger addLap method", async (): Promise<void> => {
+                vi.spyOn(component, "addLap");
+
+                const button = await loader.getHarness(MatButtonHarness.with({ text: "laps" }));
+                expect(button).not.toBeNull();
+
+                await button.click();
+                expect(component.addLap).toHaveBeenCalled();
+            });
+
+            it("should have correct tooltip", async (): Promise<void> => {
+                const button = await loader.getHarness(MatButtonHarness.with({ text: "laps" }));
+                expect(button).not.toBeNull();
+
+                const tooltip = await button.host();
+                const tooltipText = await tooltip.getAttribute("matTooltip");
+                expect(tooltipText).toBe("Lap");
+            });
+
+            it("should not show lap button when stopped", async (): Promise<void> => {
+                mockSessionState.set("stopped");
+                fixture.detectChanges();
+
+                const buttons = await loader.getAllHarnesses(MatButtonHarness.with({ text: "laps" }));
+                expect(buttons.length).toBe(0);
             });
         });
 
@@ -765,7 +858,7 @@ describe("SettingsBarComponent", (): void => {
                 expect(mockMatDialog.open).toHaveBeenCalledWith(
                     expect.any(Function),
                     expect.objectContaining({
-                        data: [],
+                        data: { summaries: [], uploadedSessionIds: [] } satisfies ILogbookDialogData,
                     }),
                 );
             });
@@ -816,7 +909,10 @@ describe("SettingsBarComponent", (): void => {
                 expect(mockMatDialog.open).toHaveBeenCalledWith(
                     expect.any(Function),
                     expect.objectContaining({
-                        data: largeSessions,
+                        data: {
+                            summaries: largeSessions,
+                            uploadedSessionIds: [],
+                        } satisfies ILogbookDialogData,
                     }),
                 );
             });

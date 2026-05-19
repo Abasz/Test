@@ -42,7 +42,10 @@ import {
 import { DashboardTileDefinition, PlacedDashboardTile } from "./dashboard.interfaces";
 import { SettingsBarComponent } from "./settings-bar/settings-bar.component";
 
-type AverageableMetricKey = Exclude<keyof ICalculatedMetrics, "distance" | "strokeCount" | "handleForces">;
+type AverageableMetricKey = Exclude<
+    keyof ICalculatedMetrics,
+    "distance" | "strokeCount" | "handleForces" | "totalWork"
+>;
 
 const PERFORMANCE_METRIC_KEYS: ReadonlyArray<AverageableMetricKey> = [
     "speed",
@@ -56,6 +59,7 @@ const ALL_AVERAGEABLE_METRIC_KEYS: ReadonlyArray<AverageableMetricKey> = [
     "recoveryDuration",
     "dragFactor",
     "peakForce",
+    "peakForcePositionNorm",
     "distPerStroke",
     "driveLength",
 ];
@@ -69,10 +73,12 @@ const ZERO_METRICS: ICalculatedMetrics = {
     strokeCount: 0,
     handleForces: [],
     peakForce: 0,
+    peakForcePositionNorm: 0,
     strokeRate: 0,
     speed: 0,
     distPerStroke: 0,
     driveLength: 0,
+    totalWork: 0,
 };
 
 /**

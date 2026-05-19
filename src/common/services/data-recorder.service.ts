@@ -12,22 +12,39 @@ import {
     IExportRecord,
     IExportSession,
     IHandleForcesEntity,
+    ILapEntity,
+    ILapExport,
     IMetricsEntity,
+    LapType,
 } from "../database.interfaces";
 import { appDB } from "../utils/app-database";
-import { createSessionFitFile } from "../utils/fit-file";
+import { createSessionFitFile } from "../utils/fit-file/fit-file";
 import { downloadFiles } from "../utils/utility.functions";
 
 @Injectable({
     providedIn: "root",
 })
 export class DataRecorderService {
-    private currentSessionId: number = Date.now();
+    private _sessionId: number = Date.now();
+
+    get currentSessionId(): number {
+        return this._sessionId;
+    }
 
     addConnectedDevice(deviceName: string): Promise<number> {
         const sessionId = this.currentSessionId;
 
         return appDB.connectedDevice.put({ deviceName, sessionId });
+    }
+
+    addLap(strokeIndex: number, type: LapType, isPause: boolean = false): Promise<number> {
+        return appDB.laps.add({
+            sessionId: this.currentSessionId,
+            timeStamp: Date.now(),
+            strokeIndex,
+            type,
+            isPause,
+        });
     }
 
     addDeltaTimes(deltaTimes: Array<number>): Promise<number> {
@@ -73,7 +90,6 @@ export class DataRecorderService {
                         )?.timeStamp ?? timeStamp,
                     sessionId,
                     strokeId: rowingData.strokeCount,
-                    peakForce: rowingData.peakForce,
                     handleForces: rowingData.handleForces,
                     driveLength: rowingData.driveLength,
                 }),
@@ -81,20 +97,31 @@ export class DataRecorderService {
         });
     }
 
-    deleteSession(sessionId: number): Promise<[number, number, number, number]> {
+    async hasSessions(): Promise<boolean> {
+        return (await appDB.sessionData.count()) > 0;
+    }
+
+    deleteSession(sessionId: number): Promise<void> {
         return appDB.transaction(
             "rw",
-            appDB.sessionData,
-            appDB.deltaTimes,
-            appDB.handleForces,
-            appDB.connectedDevice,
-            (): Promise<[number, number, number, number]> =>
-                Promise.all([
+            [
+                appDB.sessionData,
+                appDB.deltaTimes,
+                appDB.handleForces,
+                appDB.connectedDevice,
+                appDB.laps,
+                appDB.sessionUploads,
+            ],
+            async (): Promise<void> => {
+                await Promise.all([
                     appDB.sessionData.where({ sessionId }).delete(),
                     appDB.deltaTimes.where({ sessionId }).delete(),
                     appDB.handleForces.where({ sessionId }).delete(),
                     appDB.connectedDevice.where({ sessionId }).delete(),
-                ]),
+                    appDB.laps.where({ sessionId }).delete(),
+                    appDB.sessionUploads.where({ sessionId }).delete(),
+                ]);
+            },
         );
     }
 
@@ -127,10 +154,15 @@ export class DataRecorderService {
         downloadFiles(files);
     }
 
-    async exportSessionToFit(sessionId: number): Promise<void> {
+    async generateFitFile(sessionId: number): Promise<Blob> {
         const exportSession = await this.buildExportSession(sessionId);
         const fitData = createSessionFitFile(exportSession);
-        const blob = new Blob([fitData.buffer as ArrayBuffer], { type: "application/vnd.ant.fit" });
+
+        return new Blob([fitData as ArrayBuffer], { type: "application/vnd.ant.fit" });
+    }
+
+    async exportSessionToFit(sessionId: number): Promise<void> {
+        const blob = await this.generateFitFile(sessionId);
         const name = `${new Date(sessionId).toDateTimeStringFormat()} - session.fit`;
         downloadFiles([{ blob, name }]);
     }
@@ -223,6 +255,10 @@ export class DataRecorderService {
         );
     }
 
+    getLaps(sessionId: number): Promise<Array<ILapEntity>> {
+        return appDB.laps.where({ sessionId }).sortBy("timeStamp");
+    }
+
     async import(blob: Blob, progressCallback?: (progress: ImportProgress) => boolean): Promise<void> {
         const importMeta = await peakImportFile(blob);
         console.log("Database name:", importMeta.data.databaseName);
@@ -244,7 +280,7 @@ export class DataRecorderService {
     }
 
     async reset(connectedDeviceName?: string): Promise<void> {
-        this.currentSessionId = Date.now();
+        this._sessionId = Date.now();
 
         if (connectedDeviceName) {
             await this.addConnectedDevice(connectedDeviceName);
@@ -272,6 +308,7 @@ export class DataRecorderService {
             "Heart Rate",
             "Drag Factor",
             "Peak Force (N)",
+            "Peak Force Position (%)",
             "Handle Forces (N)",
         ].join(",");
 
@@ -290,8 +327,13 @@ export class DataRecorderService {
                         : 0
                     : (data.strokeRate / 60) * data.distPerStroke;
 
-            const handleForce = handleForces[data.strokeCount];
-            const handleForcesFormatted = `"${(handleForce?.handleForces ?? []).map((force: number): string => force.toFixed(2)).join(",")}"`;
+            const handleForce: IExportHandleForces = handleForces[data.strokeCount] ?? {
+                handleForces: [],
+                driveLength: 0,
+                peakForce: 0,
+                peakForcePositionNorm: 0,
+            };
+            const handleForcesFormatted = `"${handleForce.handleForces.map((force: number): string => force.toFixed(2)).join(",")}"`;
             const heartRateValue =
                 data.heartRate?.heartRate !== null && data.heartRate?.heartRate !== undefined
                     ? data.heartRate.heartRate.toString()
@@ -310,10 +352,11 @@ export class DataRecorderService {
                 data.distPerStroke.toString(),
                 data.driveDuration.toFixed(2),
                 data.recoveryDuration.toFixed(2),
-                (handleForce?.driveLength ?? 0).toFixed(2),
+                handleForce.driveLength.toFixed(2),
                 heartRateValue,
                 data.dragFactor.toString(),
-                (handleForce?.peakForce ?? 0).toFixed(2),
+                handleForce.peakForce.toFixed(2),
+                handleForce.peakForcePositionNorm.toFixed(1),
                 handleForcesFormatted,
             ].join(",");
 
@@ -345,19 +388,26 @@ export class DataRecorderService {
             appDB.sessionData,
             appDB.handleForces,
             appDB.connectedDevice,
+            appDB.laps,
             async (): Promise<IExportSession> => {
-                const [metricsEntities, handleForcesEntities, connectedDevice]: [
+                const [metricsEntities, handleForcesEntities, connectedDevice, lapEntities]: [
                     Array<IMetricsEntity>,
                     Array<IHandleForcesEntity>,
                     { sessionId: number; deviceName: string } | undefined,
+                    Array<ILapEntity>,
                 ] = await Promise.all([
                     appDB.sessionData.where({ sessionId }).toArray(),
                     appDB.handleForces.where({ sessionId }).toArray(),
                     appDB.connectedDevice.where({ sessionId }).last(),
+                    appDB.laps.where({ sessionId }).sortBy("timeStamp"),
                 ]);
 
-                const records: Array<IExportRecord> = metricsEntities.map(
-                    (metric: IMetricsEntity): IExportRecord => ({
+                const records: Array<IExportRecord> = [];
+                let totalWork = 0;
+
+                for (const metric of metricsEntities) {
+                    totalWork += metric.avgStrokePower * (metric.driveDuration + metric.recoveryDuration);
+                    records.push({
                         avgStrokePower: metric.avgStrokePower,
                         distance: metric.distance,
                         distPerStroke: metric.distPerStroke,
@@ -370,13 +420,31 @@ export class DataRecorderService {
                         elapsedTime: metric.elapsedTime,
                         heartRate: metric.heartRate,
                         timeStamp: new Date(metric.timeStamp),
-                    }),
-                );
+                        totalWork,
+                    });
+                }
 
                 const handleForces: Record<number, IExportHandleForces> = {};
                 for (const entity of handleForcesEntities) {
+                    const { peakForce, peakForceIndex }: { peakForce: number; peakForceIndex: number } =
+                        entity.handleForces.reduce(
+                            (
+                                accumulator: { peakForce: number; peakForceIndex: number },
+                                force: number,
+                                index: number,
+                            ): { peakForce: number; peakForceIndex: number } =>
+                                force > accumulator.peakForce
+                                    ? { peakForce: force, peakForceIndex: index }
+                                    : accumulator,
+                            { peakForce: 0, peakForceIndex: 0 },
+                        );
+
                     handleForces[entity.strokeId] = {
-                        peakForce: entity.peakForce,
+                        peakForce,
+                        peakForcePositionNorm:
+                            entity.handleForces.length > 1
+                                ? (peakForceIndex / (entity.handleForces.length - 1)) * 100
+                                : 0,
                         driveLength: entity.driveLength,
                         handleForces: entity.handleForces,
                     };
@@ -387,6 +455,14 @@ export class DataRecorderService {
                     deviceName: connectedDevice?.deviceName,
                     records,
                     handleForces,
+                    laps: lapEntities.map(
+                        (lap: ILapEntity): ILapExport => ({
+                            timeStamp: lap.timeStamp,
+                            strokeIndex: lap.strokeIndex,
+                            type: lap.type,
+                            isPause: lap.isPause,
+                        }),
+                    ),
                 };
             },
         );

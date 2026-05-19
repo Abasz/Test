@@ -56,9 +56,9 @@ describe("DatabaseMigrationService", (): void => {
 
         describe("when the database is already at the current version", (): void => {
             beforeEach((): void => {
-                // dexie version 3 is stored as IDB version 30
+                // dexie version 4 is stored as IDB version 40
                 vi.spyOn(globalThis.indexedDB, "databases").mockResolvedValue([
-                    { name: DB_NAME, version: 30 },
+                    { name: DB_NAME, version: 40 },
                 ]);
             });
 
@@ -158,14 +158,14 @@ describe("DatabaseMigrationService", (): void => {
             });
 
             it("should still close the dialog", async (): Promise<void> => {
-                await expect(service.initialize()).rejects.toThrowError("open failed");
+                await expect(service.initialize()).rejects.toThrow("open failed");
                 expect(mockDialogRef.close).toHaveBeenCalledTimes(1);
             });
 
             it("should still clear the progress callback", async (): Promise<void> => {
                 const setCallbackSpy = vi.spyOn(appDB, "setUpgradeProgressCallback");
 
-                await expect(service.initialize()).rejects.toThrowError("open failed");
+                await expect(service.initialize()).rejects.toThrow("open failed");
 
                 const lastCall = setCallbackSpy.mock.calls[setCallbackSpy.mock.calls.length - 1];
                 expect(lastCall[0]).toBeUndefined();

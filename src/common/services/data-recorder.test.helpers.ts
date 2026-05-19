@@ -5,12 +5,13 @@ export const mockImportData = {
     formatVersion: 1,
     data: {
         databaseName: "ESPRowingMonitorDB",
-        databaseVersion: 3,
+        databaseVersion: 4,
         tables: [
             { name: "deltaTimes", schema: "timeStamp,sessionId", rowCount: 1 },
             { name: "handleForces", schema: "timeStamp,sessionId,[sessionId+strokeId]", rowCount: 1 },
             { name: "sessionData", schema: "timeStamp,sessionId", rowCount: 2 },
             { name: "connectedDevice", schema: "sessionId", rowCount: 1 },
+            { name: "laps", schema: "timeStamp,sessionId", rowCount: 0 },
         ],
         data: [
             {
@@ -33,7 +34,6 @@ export const mockImportData = {
                         sessionId: 123456789,
                         timeStamp: 1000000001,
                         strokeId: 1,
-                        peakForce: 300,
                         handleForces: [100, 200, 300, 200, 100],
                         $types: { handleForces: "arrayNonindexKeys" },
                     },
@@ -87,6 +87,11 @@ export const mockImportData = {
                     },
                 ],
             },
+            {
+                tableName: "laps",
+                inbound: true,
+                rows: [],
+            },
         ],
     },
 };
@@ -114,7 +119,6 @@ export const setupExportSessionToCsvData = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId + 1000,
             strokeId: 50,
-            peakForce: 350,
             handleForces: [100.5, 200.25, 300.75],
             driveLength: 1.5,
         });
@@ -145,7 +149,6 @@ export const setupSpeedCalculationThreeStrokes = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId + 2500,
             strokeId: 1,
-            peakForce: 350,
             handleForces: [100, 200, 300],
             driveLength: 1.5,
         });
@@ -169,7 +172,6 @@ export const setupSpeedCalculationThreeStrokes = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId + 4500,
             strokeId: 2,
-            peakForce: 380,
             handleForces: [120, 220, 320],
             driveLength: 1.5,
         });
@@ -192,7 +194,6 @@ export const setupSpeedCalculationThreeStrokes = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId + 7300,
             strokeId: 3,
-            peakForce: 360,
             handleForces: [110, 210, 310],
             driveLength: 1.5,
         });
@@ -220,7 +221,6 @@ export const setupSpeedCalculationFilterDuplicates = async (): Promise<void> => 
             sessionId: testSessionId,
             timeStamp: testSessionId + 8300,
             strokeId: 3,
-            peakForce: 360,
             handleForces: [110, 210, 310],
             driveLength: 1.5,
         });
@@ -244,7 +244,6 @@ export const setupSpeedCalculationFilterDuplicates = async (): Promise<void> => 
             sessionId: testSessionId,
             timeStamp: testSessionId + 9300,
             strokeId: 3,
-            peakForce: 360,
             handleForces: [110, 210, 310],
             driveLength: 1.5,
         });
@@ -268,7 +267,6 @@ export const setupSpeedCalculationFilterDuplicates = async (): Promise<void> => 
             sessionId: testSessionId,
             timeStamp: testSessionId + 10300,
             strokeId: 4,
-            peakForce: 360,
             handleForces: [110, 210, 310],
             driveLength: 1.5,
         });
@@ -299,7 +297,6 @@ export const setupSpeedCalculationFirstStrokeStartTime = async (): Promise<void>
             sessionId: testSessionId,
             timeStamp: testSessionId,
             strokeId: 1,
-            peakForce: 350,
             handleForces: [100, 200, 300],
             driveLength: 1.5,
         });
@@ -323,7 +320,6 @@ export const setupSpeedCalculationFirstStrokeStartTime = async (): Promise<void>
             sessionId: testSessionId,
             timeStamp: testSessionId + 2500,
             strokeId: 2,
-            peakForce: 380,
             handleForces: [120, 220, 320],
             driveLength: 1.5,
         });
@@ -347,7 +343,6 @@ export const setupSpeedCalculationFirstStrokeStartTime = async (): Promise<void>
             sessionId: testSessionId,
             timeStamp: testSessionId + 4300,
             strokeId: 3,
-            peakForce: 360,
             handleForces: [110, 210, 310],
             driveLength: 1.5,
         });
@@ -378,7 +373,6 @@ export const setupSpeedCalculationZeroTimeDelta = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId,
             strokeId: 1,
-            peakForce: 350,
             handleForces: [100, 200, 300],
             driveLength: 0,
         });
@@ -409,7 +403,6 @@ export const setupSpeedCalculationZeroDistance = async (): Promise<void> => {
             sessionId: testSessionId,
             timeStamp: testSessionId + 2000,
             strokeId: 1,
-            peakForce: 0,
             handleForces: [0, 0, 0],
             driveLength: 0,
         });

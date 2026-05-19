@@ -1,6 +1,14 @@
 import { ISessionData } from "./common.interfaces";
 
-export interface IMetricsEntity extends Omit<ISessionData, "peakForce" | "handleForces" | "driveLength"> {
+export interface ISessionUploadEntity {
+    sessionId: number;
+    uploadedAt?: number;
+}
+
+export interface IMetricsEntity extends Omit<
+    ISessionData,
+    "peakForce" | "peakForcePositionNorm" | "handleForces" | "driveLength" | "totalWork"
+> {
     sessionId: number;
     timeStamp: number;
 }
@@ -9,7 +17,6 @@ export interface IHandleForcesEntity {
     timeStamp: number;
     sessionId: number;
     strokeId: number;
-    peakForce: number;
     handleForces: Array<number>;
     driveLength: number;
 }
@@ -25,19 +32,36 @@ export interface IConnectedDeviceEntity {
     deviceName: string;
 }
 
-export type IExportRecord = Omit<ISessionData, "peakForce" | "handleForces" | "driveLength"> & {
+export type LapType = "manual" | "distance" | "time";
+
+export interface ILapEntity {
+    sessionId: number;
+    timeStamp: number;
+    strokeIndex: number;
+    type: LapType;
+    isPause: boolean;
+}
+
+export type IExportRecord = Omit<
+    ISessionData,
+    "peakForce" | "peakForcePositionNorm" | "handleForces" | "driveLength"
+> & {
     timeStamp: Date;
 };
 
 export interface IExportHandleForces {
     peakForce: number;
+    peakForcePositionNorm: number;
     driveLength: number;
     handleForces: Array<number>;
 }
+
+export type ILapExport = Omit<ILapEntity, "sessionId">;
 
 export interface IExportSession {
     sessionId: number;
     deviceName?: string;
     records: Array<IExportRecord>;
     handleForces: Record<number, IExportHandleForces>;
+    laps: Array<ILapExport>;
 }

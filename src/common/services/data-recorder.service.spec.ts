@@ -3,7 +3,7 @@ import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 import { ISessionData, ISessionSummary } from "../common.interfaces";
-import { IExportSession } from "../database.interfaces";
+import { IExportSession, ILapEntity } from "../database.interfaces";
 import { appDB } from "../utils/app-database";
 
 import { DataRecorderService } from "./data-recorder.service";
@@ -50,6 +50,8 @@ describe("DataRecorderService", (): void => {
     let connectedDeviceWhereSpy: Mock;
     let deltaTimesPutSpy: Mock;
     let deltaTimesWhereSpy: Mock;
+    let lapsAddSpy: Mock;
+    let lapsWhereSpy: Mock;
     let sessionDataAddSpy: Mock;
     let sessionDataWhereSpy: Mock;
     let handleForcesPutSpy: Mock;
@@ -69,8 +71,10 @@ describe("DataRecorderService", (): void => {
             strokeRate: 24,
             elapsedTime: 0,
             peakForce: 350,
+            peakForcePositionNorm: 0,
             handleForces: [100, 200, 300],
             driveLength: 1.5,
+            totalWork: 0,
         };
     };
 
@@ -78,11 +82,12 @@ describe("DataRecorderService", (): void => {
         vi.useFakeTimers();
         vi.setSystemTime(mockTimeStamp);
 
-        // setup spies on appDB methods
         connectedDevicePutSpy = vi.spyOn(appDB.connectedDevice, "put");
         connectedDeviceWhereSpy = vi.spyOn(appDB.connectedDevice, "where");
         deltaTimesPutSpy = vi.spyOn(appDB.deltaTimes, "put");
         deltaTimesWhereSpy = vi.spyOn(appDB.deltaTimes, "where");
+        lapsAddSpy = vi.spyOn(appDB.laps, "add");
+        lapsWhereSpy = vi.spyOn(appDB.laps, "where");
         sessionDataAddSpy = vi.spyOn(appDB.sessionData, "add");
         sessionDataWhereSpy = vi.spyOn(appDB.sessionData, "where");
         vi.spyOn(appDB.sessionData, "orderBy");
@@ -101,11 +106,11 @@ describe("DataRecorderService", (): void => {
         vi.restoreAllMocks();
         vi.useRealTimers();
 
-        // clean up database after each test
         await appDB.connectedDevice.clear();
         await appDB.deltaTimes.clear();
         await appDB.sessionData.clear();
         await appDB.handleForces.clear();
+        await appDB.laps.clear();
     });
 
     describe("addConnectedDevice method", (): void => {
@@ -209,7 +214,6 @@ describe("DataRecorderService", (): void => {
                 timeStamp: mockTimeStamp,
                 sessionId: mockTimeStamp,
                 strokeId: sessionData.strokeCount,
-                peakForce: sessionData.peakForce,
                 handleForces: sessionData.handleForces,
                 driveLength: sessionData.driveLength,
             });
@@ -221,7 +225,6 @@ describe("DataRecorderService", (): void => {
                 timeStamp: existingTimestamp,
                 sessionId: mockTimeStamp,
                 strokeId: 50,
-                peakForce: 300,
                 driveLength: 1.0,
                 handleForces: [80, 150, 200],
             });
@@ -255,6 +258,114 @@ describe("DataRecorderService", (): void => {
         });
     });
 
+    describe("addLap method", (): void => {
+        it("should call appDB.laps.add with correct arguments", async (): Promise<void> => {
+            await service.addLap(10, "manual");
+
+            expect(lapsAddSpy).toHaveBeenCalledTimes(1);
+            expect(lapsAddSpy).toHaveBeenCalledWith({
+                sessionId: mockTimeStamp,
+                timeStamp: mockTimeStamp,
+                strokeIndex: 10,
+                type: "manual",
+                isPause: false,
+            });
+        });
+
+        it("should pass isPause flag when provided", async (): Promise<void> => {
+            await service.addLap(5, "manual", true);
+
+            expect(lapsAddSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    isPause: true,
+                }),
+            );
+        });
+
+        it("should store the lap in the database", async (): Promise<void> => {
+            await service.addLap(10, "manual");
+
+            const storedLaps: Array<ILapEntity> = await appDB.laps
+                .where({ sessionId: mockTimeStamp })
+                .toArray();
+            expect(storedLaps).toHaveLength(1);
+            expect(storedLaps[0].strokeIndex).toBe(10);
+            expect(storedLaps[0].type).toBe("manual");
+            expect(storedLaps[0].isPause).toBe(false);
+        });
+    });
+
+    describe("getLaps method", (): void => {
+        const sessionId = 1700000000000;
+
+        it("should return laps sorted by timeStamp", async (): Promise<void> => {
+            await appDB.laps.add({
+                sessionId,
+                timeStamp: sessionId + 2000,
+                strokeIndex: 20,
+                type: "manual",
+                isPause: false,
+            });
+            await appDB.laps.add({
+                sessionId,
+                timeStamp: sessionId + 1000,
+                strokeIndex: 10,
+                type: "manual",
+                isPause: true,
+            });
+
+            const laps = await service.getLaps(sessionId);
+
+            expect(laps).toHaveLength(2);
+            expect(laps[0].strokeIndex).toBe(10);
+            expect(laps[1].strokeIndex).toBe(20);
+        });
+
+        it("should return empty array when no laps exist", async (): Promise<void> => {
+            const laps = await service.getLaps(sessionId);
+
+            expect(laps).toHaveLength(0);
+        });
+
+        it("should only return laps for the given session", async (): Promise<void> => {
+            const otherSessionId = sessionId + 100000;
+            await appDB.laps.add({
+                sessionId,
+                timeStamp: sessionId + 1000,
+                strokeIndex: 10,
+                type: "manual",
+                isPause: false,
+            });
+            await appDB.laps.add({
+                sessionId: otherSessionId,
+                timeStamp: otherSessionId + 1000,
+                strokeIndex: 5,
+                type: "manual",
+                isPause: false,
+            });
+
+            const laps = await service.getLaps(sessionId);
+
+            expect(laps).toHaveLength(1);
+            expect(laps[0].strokeIndex).toBe(10);
+        });
+    });
+
+    describe("hasSessions method", (): void => {
+        it("should return false when the logbook is empty", async (): Promise<void> => {
+            expect(await service.hasSessions()).toBe(false);
+        });
+
+        it("should return true when at least one session exists", async (): Promise<void> => {
+            const sessionId = 1700000000000;
+            await appDB.sessionData.add({ sessionId, timeStamp: sessionId } as Parameters<
+                typeof appDB.sessionData.add
+            >[0]);
+
+            expect(await service.hasSessions()).toBe(true);
+        });
+    });
+
     describe("deleteSession method", (): void => {
         const sessionId = 1700000000000;
 
@@ -268,14 +379,21 @@ describe("DataRecorderService", (): void => {
                 sessionId,
                 timeStamp: sessionId,
                 strokeId: 1,
-                peakForce: 200,
                 driveLength: 1.0,
                 handleForces: [100],
             });
+            await appDB.laps.add({
+                sessionId,
+                timeStamp: sessionId,
+                strokeIndex: 10,
+                type: "manual",
+                isPause: false,
+            });
+            await appDB.sessionUploads.put({ sessionId, uploadedAt: sessionId + 1000 });
 
-            // clear spies after setup
             connectedDeviceWhereSpy.mockClear();
             deltaTimesWhereSpy.mockClear();
+            lapsWhereSpy.mockClear();
             sessionDataWhereSpy.mockClear();
             handleForcesWhereSpy.mockClear();
             transactionSpy.mockClear();
@@ -286,10 +404,14 @@ describe("DataRecorderService", (): void => {
 
             expect(transactionSpy).toHaveBeenCalledWith(
                 "rw",
-                appDB.sessionData,
-                appDB.deltaTimes,
-                appDB.handleForces,
-                appDB.connectedDevice,
+                [
+                    appDB.sessionData,
+                    appDB.deltaTimes,
+                    appDB.handleForces,
+                    appDB.connectedDevice,
+                    appDB.laps,
+                    appDB.sessionUploads,
+                ],
                 expect.any(Function),
             );
         });
@@ -318,6 +440,12 @@ describe("DataRecorderService", (): void => {
             expect(connectedDeviceWhereSpy).toHaveBeenCalledWith({ sessionId });
         });
 
+        it("should call laps.where with correct sessionId", async (): Promise<void> => {
+            await service.deleteSession(sessionId);
+
+            expect(lapsWhereSpy).toHaveBeenCalledWith({ sessionId });
+        });
+
         it("should delete session data from all tables", async (): Promise<void> => {
             await service.deleteSession(sessionId);
 
@@ -325,17 +453,19 @@ describe("DataRecorderService", (): void => {
             const deltaTimes = await appDB.deltaTimes.where({ sessionId }).toArray();
             const sessionData = await appDB.sessionData.where({ sessionId }).toArray();
             const handleForces = await appDB.handleForces.where({ sessionId }).toArray();
+            const laps = await appDB.laps.where({ sessionId }).toArray();
+            const sessionUploads = await appDB.sessionUploads.where({ sessionId }).toArray();
 
             expect(connectedDevices).toHaveLength(0);
             expect(deltaTimes).toHaveLength(0);
             expect(sessionData).toHaveLength(0);
             expect(handleForces).toHaveLength(0);
+            expect(laps).toHaveLength(0);
+            expect(sessionUploads).toHaveLength(0);
         });
 
-        it("should return delete counts from all tables", async (): Promise<void> => {
-            const result = await service.deleteSession(sessionId);
-
-            expect(result).toEqual([1, 1, 1, 1]);
+        it("should resolve when all tables are cleared", async (): Promise<void> => {
+            await expect(service.deleteSession(sessionId)).resolves.toBeUndefined();
         });
     });
 
@@ -452,7 +582,6 @@ describe("DataRecorderService", (): void => {
                         sessionId: testSessionId,
                         timeStamp: testSessionId + 1000,
                         strokeId: 55,
-                        peakForce: 320,
                         handleForces: [90, 180, 270],
                         driveLength: 1.2,
                     });
@@ -471,7 +600,7 @@ describe("DataRecorderService", (): void => {
             const exportedData = JSON.parse(await createdBlobs[0].text());
             expect(exportedData.formatName).toBe("dexie");
             expect(exportedData.data.databaseName).toBe("ESPRowingMonitorDB");
-            expect(exportedData.data.tables).toHaveLength(4);
+            expect(exportedData.data.tables).toHaveLength(6);
         });
 
         it("should include test data with correct sessionId in exported JSON", async (): Promise<void> => {
@@ -605,7 +734,6 @@ describe("DataRecorderService", (): void => {
                     sessionId: testSessionId,
                     timeStamp: testSessionId + 1000,
                     strokeId: 50,
-                    peakForce: 350,
                     handleForces: [100, 200, 300],
                     driveLength: 1.5,
                 });
@@ -697,6 +825,66 @@ describe("DataRecorderService", (): void => {
             expect(sessionData["deviceName"]).toBe("ESP Rowing Monitor");
         });
 
+        it("should include laps in exported JSON", async (): Promise<void> => {
+            const createdBlobs: Array<Blob> = [];
+            createObjectURLSpy.mockImplementation((blob: Blob): string => {
+                createdBlobs.push(blob);
+
+                return "blob:test-url";
+            });
+
+            await appDB.laps.bulkAdd([
+                {
+                    sessionId: testSessionId,
+                    timeStamp: testSessionId + 4000,
+                    strokeIndex: 2,
+                    type: "time",
+                    isPause: false,
+                },
+                {
+                    sessionId: testSessionId,
+                    timeStamp: testSessionId + 2000,
+                    strokeIndex: 1,
+                    type: "distance",
+                    isPause: false,
+                },
+            ]);
+
+            await service.exportSessionToJson(testSessionId);
+
+            const sessionContent = await createdBlobs[0].text();
+            const exportData = JSON.parse(sessionContent) as IExportSession;
+            expect(exportData.laps).toHaveLength(2);
+            expect(exportData.laps[0]).toEqual({
+                timeStamp: testSessionId + 2000,
+                strokeIndex: 1,
+                type: "distance",
+                isPause: false,
+            });
+            expect(exportData.laps[1]).toEqual({
+                timeStamp: testSessionId + 4000,
+                strokeIndex: 2,
+                type: "time",
+                isPause: false,
+            });
+            expect(exportData.laps[0]).not.toHaveProperty("sessionId");
+        });
+
+        it("should export empty laps array when no laps exist", async (): Promise<void> => {
+            const createdBlobs: Array<Blob> = [];
+            createObjectURLSpy.mockImplementation((blob: Blob): string => {
+                createdBlobs.push(blob);
+
+                return "blob:test-url";
+            });
+
+            await service.exportSessionToJson(testSessionId);
+
+            const sessionContent = await createdBlobs[0].text();
+            const exportData = JSON.parse(sessionContent) as IExportSession;
+            expect(exportData.laps).toEqual([]);
+        });
+
         describe("when Web Share API is available", (): void => {
             let shareSpy: Mock;
 
@@ -759,7 +947,6 @@ describe("DataRecorderService", (): void => {
                     sessionId: testSessionId,
                     timeStamp: testSessionId + 1000,
                     strokeId: 50,
-                    peakForce: 350,
                     handleForces: [100, 200, 300],
                     driveLength: 1.5,
                 });
@@ -804,6 +991,49 @@ describe("DataRecorderService", (): void => {
         });
     });
 
+    describe("generateFitFile method", (): void => {
+        const testSessionId = 1700000000000;
+
+        beforeEach(async (): Promise<void> => {
+            await appDB.transaction("rw", appDB.sessionData, appDB.handleForces, (): void => {
+                appDB.sessionData.add({
+                    sessionId: testSessionId,
+                    timeStamp: testSessionId + 1000,
+                    avgStrokePower: 150,
+                    distance: 5000,
+                    distPerStroke: 8,
+                    dragFactor: 110,
+                    driveDuration: 0.8,
+                    recoveryDuration: 1.2,
+                    speed: 4.2,
+                    strokeCount: 50,
+                    strokeRate: 24,
+                    elapsedTime: 1,
+                });
+                appDB.handleForces.put({
+                    sessionId: testSessionId,
+                    timeStamp: testSessionId + 1000,
+                    strokeId: 50,
+                    handleForces: [100, 200, 300],
+                    driveLength: 1.5,
+                });
+            });
+        });
+
+        it("should return a Blob with the FIT MIME type", async (): Promise<void> => {
+            const blob = await service.generateFitFile(testSessionId);
+
+            expect(blob).toBeInstanceOf(Blob);
+            expect(blob.type).toBe("application/vnd.ant.fit");
+        });
+
+        it("should return a non-empty Blob", async (): Promise<void> => {
+            const blob = await service.generateFitFile(testSessionId);
+
+            expect(blob.size).toBeGreaterThan(0);
+        });
+    });
+
     describe("exportSessionToCsv method", (): void => {
         const testSessionId = 1700000000000;
         let createObjectURLSpy: Mock;
@@ -836,7 +1066,6 @@ describe("DataRecorderService", (): void => {
                     sessionId: testSessionId,
                     timeStamp: testSessionId + 1000,
                     strokeId: 50,
-                    peakForce: 350,
                     handleForces: [100.5, 200.25, 300.75],
                     driveLength: 1.5,
                 });
@@ -867,6 +1096,7 @@ describe("DataRecorderService", (): void => {
             expect(content).toContain("Distance (m)");
             expect(content).toContain("Heart Rate");
             expect(content).toContain("Drive Length (m)");
+            expect(content).toContain("Peak Force Position (%)");
             expect(content).toContain("Handle Forces (N)");
         });
 
@@ -896,6 +1126,17 @@ describe("DataRecorderService", (): void => {
             const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
             const content = await blobArg.text();
             expect(content).toContain('"100.50,200.25,300.75"');
+        });
+
+        it("should include peak force position in CSV row", async (): Promise<void> => {
+            await service.exportSessionToCsv(testSessionId);
+
+            const blobArg = createObjectURLSpy.mock.calls[0][0] as Blob;
+            const content = await blobArg.text();
+            const rows = content.trim().split("\n");
+            const dataRow = rows[1].split(",");
+            const header = rows[0].split(",").indexOf("Peak Force Position (%)");
+            expect(dataRow[header]).toBe("100.0");
         });
 
         it("should export session data with deltaTimes when available", async (): Promise<void> => {
@@ -1088,7 +1329,7 @@ describe("DataRecorderService", (): void => {
             expect(deltaTimes[0].deltaTimes).toEqual([120, 130, 140]);
 
             expect(handleForces).toHaveLength(1);
-            expect(handleForces[0].peakForce).toBe(300);
+            expect(handleForces[0].handleForces).toEqual([100, 200, 300, 200, 100]);
 
             expect(connectedDevice).toHaveLength(1);
             expect(connectedDevice[0].deviceName).toBe("TestDevice");
@@ -1105,7 +1346,6 @@ describe("DataRecorderService", (): void => {
         it("should import data successfully without progress callback", async (): Promise<void> => {
             await service.import(mockBlob);
 
-            // verify data was imported
             const sessionData = await appDB.sessionData.where({ sessionId: 123456789 }).toArray();
             expect(sessionData).toHaveLength(2);
         });

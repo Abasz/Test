@@ -30,7 +30,7 @@ jobs:
       - name:  Build binaries for all rowers and board profiles
         run: |
           echo "🔨 Building binaries"
-          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom|dynamic|kayak|generic)).*')
+          environments=$(platformio project config | grep -oP '^env:\K(?!(.*debug|custom|dynamic|kayak|generic|old)).*')
           echo
           echo "Environments:"
           mapfile -t env_array <<< "$environments"
@@ -71,7 +71,7 @@ jobs:
           done
 
       - name: 📎 Upload firmware binaries
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{github.workspace}}/release_assets/*
           fail_on_unmatched_files: true

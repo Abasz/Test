@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: 255cd481830bd48c45ace7c1590f81c607b8aadd
 
       - name: 🔧 Set up NodeJs
         uses: actions/setup-node@v6

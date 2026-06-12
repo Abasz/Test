@@ -1,0 +1,47 @@
+<mat-toolbar>
+    <div class="flex-row items-center justify-center">
+        <div class="flex-row justify-center">
+            <mat-icon class="battery-level" matTooltipShowDelay="1000" [matTooltip]="batteryLevel() + '%'">{{
+                batteryLevel() | batteryLevel
+            }}</mat-icon>
+        </div>
+        <button matTooltipShowDelay="1000" matTooltip="Logbook" (click)="openLogbook()" mat-icon-button>
+            <mat-icon>sports_score</mat-icon>
+        </button>
+        <app-open-settings-button></app-open-settings-button>
+        @if (sessionState() !== "running" && sessionState() !== "paused") {
+            <button matTooltipShowDelay="1000" matTooltip="Start" (click)="startSession()" mat-icon-button>
+                <mat-icon>play_circle</mat-icon>
+            </button>
+        }
+        @if (sessionState() === "paused") {
+            <button matTooltipShowDelay="1000" matTooltip="Resume" (click)="startSession()" mat-icon-button>
+                <mat-icon>play_circle</mat-icon>
+            </button>
+        }
+        @if (sessionState() === "running") {
+            <button matTooltipShowDelay="1000" matTooltip="Pause" (click)="pauseSession()" mat-icon-button>
+                <mat-icon>pause_circle</mat-icon>
+            </button>
+            <button matTooltipShowDelay="1000" matTooltip="Lap" (click)="addLap()" mat-icon-button>
+                <mat-icon>laps</mat-icon>
+            </button>
+        }
+        @if (sessionState() === "running" || sessionState() === "paused") {
+            <button matTooltipShowDelay="1000" matTooltip="Stop" (click)="stopSession()" mat-icon-button>
+                <mat-icon>stop_circle</mat-icon>
+            </button>
+        }
+        <app-connect-heart-rate-button></app-connect-heart-rate-button>
+        <app-connect-erg-button></app-connect-erg-button>
+        <span>{{
+            ergConnectionStatus().status !== "connected"
+                ? ""
+                : BleServiceNames[BleServiceFlag[settings().generalSettings.bleServiceFlag]]
+        }}</span>
+    </div>
+    <span class="time-of-day">
+        {{ timeOfDay() | date: "HH:mm" }}
+    </span>
+    <span class="title">ESP Rowing Monitor</span>
+</mat-toolbar>

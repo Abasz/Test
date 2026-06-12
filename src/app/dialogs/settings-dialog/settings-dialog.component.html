@@ -1,0 +1,48 @@
+<h1 mat-dialog-title>Settings</h1>
+<div mat-dialog-content>
+    <mat-tab-group
+        dynamicHeight
+        [selectedIndex]="currentTabIndex()"
+        (selectedIndexChange)="onTabChange($event)"
+    >
+        <mat-tab label="General">
+            <app-general-settings
+                [rowerSettings]="data.rowerSettings"
+                [deviceInfo]="data.deviceInfo"
+                [isConnected]="data.ergConnectionStatus.status === 'connected'"
+                (isFormValidChange)="onGeneralFormValidityChange($event)"
+            >
+            </app-general-settings>
+        </mat-tab>
+
+        <mat-tab label="Display">
+            <app-display-settings (isFormValidChange)="onDisplayFormValidityChange($event)">
+            </app-display-settings>
+        </mat-tab>
+
+        <mat-tab
+            label="Rowing"
+            [disabled]="data.rowerSettings.generalSettings.isRuntimeSettingsEnabled === undefined"
+        >
+            <app-rowing-settings
+                [rowerSettings]="data.rowerSettings"
+                [isConnected]="data.ergConnectionStatus.status === 'connected'"
+                [isSmallScreen]="(breakPoints$ | async) ?? false"
+                (isFormValidChange)="onRowingFormValidityChange($event)"
+            >
+            </app-rowing-settings>
+        </mat-tab>
+    </mat-tab-group>
+</div>
+<div mat-dialog-actions align="end">
+    @if (
+        currentTabIndex() === SettingsTab.Rowing &&
+        data.rowerSettings.generalSettings.isRuntimeSettingsEnabled
+    ) {
+        <button (click)="exportProfile()" mat-raised-button class="export-profile-button">
+            Export Profile
+        </button>
+    }
+    <button (click)="saveSettings()" mat-raised-button [disabled]="!isSaveButtonEnabled()">Save</button>
+    <button (click)="handleDialogClose()" mat-raised-button>Cancel</button>
+</div>

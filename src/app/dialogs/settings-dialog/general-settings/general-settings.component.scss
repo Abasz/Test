@@ -1,0 +1,95 @@
+@use "../../../../flex-layout-mixins.scss" as flex-layout;
+
+form mat-slide-toggle {
+    margin: 8px 0;
+    display: block;
+}
+
+.general-container {
+    display: grid;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+
+    @media (min-width: 400px) {
+        grid-template-columns: max-content auto;
+    }
+
+    mat-button-toggle-group {
+        max-width: fit-content;
+    }
+
+    .auto-lap-settings {
+        --mat-form-field-container-vertical-padding: 8px;
+        --mat-form-field-container-height: 100%;
+        grid-template-columns: repeat(2, max-content);
+
+        @include flex-layout.xs {
+            grid-template-columns: 180px;
+        }
+
+        div.mat-mdc-form-field-infix {
+            width: 100%;
+        }
+
+        mat-form-field {
+            height: 100%;
+            margin-bottom: 0;
+            @include flex-layout.gt-xs {
+                max-width: 145px;
+            }
+        }
+
+        mat-slider {
+            margin-right: 24px;
+        }
+    }
+
+    label {
+        font-weight: 500;
+    }
+}
+
+div.erg-info > span {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    user-select: none;
+    font-size: 12px;
+    font-style: italic;
+    margin-right: 6px;
+    min-height: 24px;
+}
+
+.rotating {
+    display: inline-block;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: spin 1s linear infinite;
+    will-change: transform;
+}
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+mat-option {
+    font-size: 16px;
+}
+
+.tab-content {
+    padding-top: 16px;
+    padding-bottom: 16px;
+}
+
+mat-form-field[subscriptSizing="dynamic"] {
+    margin-bottom: 8px;
+}
+
+h4 {
+    margin: 8px 0;
+}

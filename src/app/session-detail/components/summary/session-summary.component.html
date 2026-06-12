@@ -1,0 +1,115 @@
+<mat-card class="gt-sm-grid-row-span-2">
+    <h3>Totals</h3>
+    <div class="metrics totals flex-row flex-auto gt-sm-flex-col flex-wrap justify-space-around gap-8">
+        <div>
+            <span class="label">Distance</span>
+            <span class="value"
+                >{{ stats().totalDistance | number: "1.0-0" }} <span class="unit">m</span></span
+            >
+        </div>
+        <div>
+            <span class="label">Time</span>
+            <span class="value">{{ stats().totalTime | secondsToTime: "pace" }}</span>
+        </div>
+        <div>
+            <span class="label">Strokes</span>
+            <span class="value">{{ stats().totalStrokeCount }}</span>
+        </div>
+    </div>
+</mat-card>
+
+<mat-card>
+    <h3>Maximums</h3>
+    <div class="metrics flex-row flex-wrap gap-16 justify-space-around">
+        <div>
+            <span class="label">Pace</span>
+            <span class="value"
+                >{{ maxPace() }}
+                <span class="unit">/500m</span>
+            </span>
+        </div>
+        @for (metric of maxMetrics(); track metric.label) {
+            <div>
+                <span class="label">{{ metric.label }}</span>
+                <span class="value">
+                    {{ metric.value | number: metric.format }}
+                    @if (metric.unit) {
+                        <span class="unit">{{ metric.unit }}</span>
+                    }
+                </span>
+            </div>
+        }
+    </div>
+</mat-card>
+
+<mat-card>
+    <h3>Averages</h3>
+    <div class="metrics flex-row flex-wrap gap-16 justify-space-around">
+        <div>
+            <span class="label">Pace</span>
+            <span class="value"
+                >{{ avgPace() }}
+                <span class="unit">/500m</span>
+            </span>
+        </div>
+
+        @for (metric of avgMetrics(); track metric.label) {
+            <div>
+                <span class="label">{{ metric.label }}</span>
+                <span class="value">
+                    {{ metric.value | number: metric.format }}
+                    @if (metric.unit) {
+                        <span class="unit">{{ metric.unit }}</span>
+                    }
+                </span>
+            </div>
+        }
+
+        @if (balanceDisplay(); as display) {
+            <div>
+                <span class="label">Balance</span>
+                <span class="value">A {{ display.sideA }}% / B {{ display.sideB }}%</span>
+            </div>
+            @if (display.consistency) {
+                <div>
+                    <span class="label">Consistency</span>
+                    <span class="value">{{ display.consistency }}</span>
+                </div>
+            }
+        }
+    </div>
+</mat-card>
+
+<div class="charts-section flex-col gap-8">
+    @for (chart of charts(); track chart.title) {
+        <div class="chart-wrapper flex-col">
+            <div class="chart-header flex-row items-center gap-8">
+                <span [style.background-color]="chart.color"></span>
+                <span>{{ chart.title }}</span>
+            </div>
+            <app-session-chart
+                class="flex-1"
+                [chartData]="chart.data"
+                [chartOptions]="chart.options"
+                [tooltipUnit]="chart.unit"
+                [tooltipDecimals]="chart.decimals"
+            />
+        </div>
+    }
+</div>
+@if (analysis().laps.length > 1) {
+    <mat-card class="laps-section">
+        <div class="flex-row items-center justify-space-between">
+            <h3>Laps</h3>
+            @if (selectedLap()) {
+                <button mat-button (click)="onShowFullSession()">Show Full Session</button>
+            }
+        </div>
+        <app-lap-table
+            [laps]="analysis().laps"
+            [selectedLap]="selectedLap()"
+            [showBalanceColumn]="isKayakSession()"
+            (lapSelected)="onLapSelected($event)"
+        />
+    </mat-card>
+}

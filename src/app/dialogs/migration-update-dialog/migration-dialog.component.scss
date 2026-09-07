@@ -1,7 +1,0 @@
-@use "../../../flex-layout-mixins.scss" as flex-layout;
-
-.progress {
-    @include flex-layout.gt-xs {
-        min-width: 370px;
-    }
-}
